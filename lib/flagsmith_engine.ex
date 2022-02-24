@@ -179,33 +179,19 @@ defmodule FlagsmithEngine do
         traits,
         condition,
         segment_id,
-        identifier,
-        iterations \\ 1
+        identifier
       )
 
   def traits_match_segment_condition(
-        traits,
-        %Segments.Segment.Condition{operator: :PERCENTAGE_SPLIT, value: value} = condition,
+        _traits,
+        %Segments.Segment.Condition{operator: :PERCENTAGE_SPLIT, value: value},
         segment_id,
-        identifier,
-        iterations
+        identifier
       ) do
     with {_, {float, _}} <- {:float_parse, Float.parse(value)},
          {_, percentage} <-
-           {:percentage, percentage_from_ids([segment_id, identifier], iterations)} do
-      case percentage do
-        100 ->
-          traits_match_segment_condition(
-            traits,
-            condition,
-            segment_id,
-            identifier,
-            iterations + 1
-          )
-
-        _ ->
-          percentage <= float
-      end
+           {:percentage, percentage_from_ids([segment_id, identifier], 1)} do
+      percentage <= float
     else
       {_what, _} ->
         false
@@ -216,8 +202,7 @@ defmodule FlagsmithEngine do
         traits,
         %Segments.Segment.Condition{operator: operator, value: value, property_: prop},
         _segment_id,
-        _identifier,
-        _iterations
+        _identifier
       ) do
     Enum.all?(traits, fn %Traits.Trait{
                            trait_key: t_key,
@@ -242,11 +227,13 @@ defmodule FlagsmithEngine do
   def percentage_from_ids(original_ids, iterations \\ 1) do
     with {_, as_strings} <- {:strings, Enum.map(original_ids, &id_to_string/1)},
          {_, ids} <- {:ids, List.duplicate(as_strings, iterations)},
-         {_, stringed} <- {:join, Enum.join(ids, ",")},
-         {_, hashed} <- {:hash, :crypto.hash(:md5, stringed)},
-         {_, hexed} <- {:hex, Base.hex_encode32(hashed)},
-         {_, {int, _}} <- {:int_parse, Integer.parse(hexed, 32)} do
-      Integer.mod(int, 9999) / 9998 * 100
+         {_, stringed} <- {:join, List.flatten(ids) |> Enum.join(",")},
+         {_, hashed} <- {:hash, FlagsmithEngine.HashingBehaviour.hash(stringed)},
+         {_, {int, _}} <- {:int_parse, Integer.parse(hashed, 16)} do
+      case round(Integer.mod(int, 9999) / 9998 * 100) do
+        100 -> percentage_from_ids(original_ids, iterations + 1)
+        percentage -> percentage
+      end
     else
       {_, _} = error -> {:error, error}
     end

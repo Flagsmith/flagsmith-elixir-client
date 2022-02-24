@@ -1,5 +1,12 @@
 defmodule FlagsmithEngine.HashingTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
+
+  import Mox, only: [stub_with: 2, verify_on_exit!: 1, expect: 3]
+
+  setup do
+    stub_with(FlagsmithEngine.MockHashing, FlagsmithEngine.HashingUtils)
+    :ok
+  end
 
   # this will generate random ids whenever called so the more assertions use it
   # the more it verifies those assertions are correct if they pass. If for some
@@ -37,7 +44,7 @@ defmodule FlagsmithEngine.HashingTest do
 
   test "percentage is different between different ids" do
     ids_1 = [10, 5200]
-    ids_2 = [5200, 10]
+    ids_2 = [5200, 11]
 
     assert FlagsmithEngine.percentage_from_ids(ids_1) !=
              FlagsmithEngine.percentage_from_ids(ids_2)
@@ -69,6 +76,41 @@ defmodule FlagsmithEngine.HashingTest do
       assert values
              |> Enum.slice(bucket_start..bucket_end)
              |> Enum.all?(&(&1 <= bucket_value_limit))
+    end
+  end
+
+  describe "with mock" do
+    setup :verify_on_exit!
+
+    # to understand this test read the comments on that test
+    # https://github.com/Flagsmith/flagsmith-engine/blob/c34b4baeea06d31d221433053b64c1e855fd8d4d/tests/unit/utils/test_utils_hashing.py#L95
+    # basically we mock the hashing so that the hex string returned from the hashing
+    # provides given values. In this case, 100 and 0. Since when the percentage is 100
+    # the function is expected to try again until it no longer is (by duplicating the
+    # ids used to hash) it should follow that if the first call returns 100 the hashing
+    # function should be called again, hence why we set up 2 expectations
+
+    test "hash_percentage doesn't return 1" do
+      # the first time it's called it will return a string that parses to 100 so it
+      # percentage_from_ids/1 should call again the hash util in order to get a new
+      # try at hashing until it's no longer 100
+      expect(FlagsmithEngine.MockHashing, :hash, fn stringed ->
+        assert stringed == "12,93"
+        "270e"
+      end)
+
+      # this second time this string parses to 0
+      expect(FlagsmithEngine.MockHashing, :hash, fn stringed ->
+        assert stringed == "12,93,12,93"
+        "270f"
+      end)
+
+      object_ids = [12, 93]
+
+      value = FlagsmithEngine.percentage_from_ids(object_ids)
+
+      # the value is 0 as defined by the second call to the mock
+      assert value == 0
     end
   end
 end
