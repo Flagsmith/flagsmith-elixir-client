@@ -8,5 +8,5 @@ defmodule Flagsmith.Schemas.Types.Segment.Type do
 
   def enum_matching_function(:ALL), do: &Enum.all?/2
   def enum_matching_function(:ANY), do: &Enum.any?/2
-  def enum_matching_function(:NONE), do: &(!Enum.all?(&1, &2))
+  def enum_matching_function(:NONE), do: &(!Enum.any?(&1, &2))
 end

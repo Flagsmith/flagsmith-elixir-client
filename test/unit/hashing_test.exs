@@ -50,6 +50,15 @@ defmodule FlagsmithEngine.HashingTest do
              FlagsmithEngine.percentage_from_ids(ids_2)
   end
 
+  # ##QA## is this expected? 
+  test "percentage is the same between same ids in different order" do
+    ids_1 = [10, 5200]
+    ids_2 = [5200, 10]
+
+    assert FlagsmithEngine.percentage_from_ids(ids_1) ==
+             FlagsmithEngine.percentage_from_ids(ids_2)
+  end
+
   test "ids are evenly distributed" do
     sample = 500
     buckets = 50
