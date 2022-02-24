@@ -7,7 +7,7 @@ defmodule FlagsmithEngine do
   }
 
   alias Traits.Trait
-
+  alias Flagsmith.Schemas.Types
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
 
   @moduledoc """
@@ -210,7 +210,6 @@ defmodule FlagsmithEngine do
                          } ->
       case cast_value(t_value, value) do
         {:ok, casted} ->
-          IO.inspect(op: operator, value: value, t_value: t_value, casted: casted)
           trait_match(operator, casted, t_value)
 
         _ ->
@@ -237,44 +236,97 @@ defmodule FlagsmithEngine do
   def id_to_string(bin) when is_binary(bin), do: bin
   def id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
 
-  def trait_match(:NOT_CONTAINS, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value not in t_value
+  @spec trait_match(
+          condition :: Types.Operator.t(),
+          segment_value :: String.t() | Trait.Value.t(),
+          trait :: Trait.Value.t()
+        ) :: boolean()
+  def trait_match(:NOT_CONTAINS, %Trait.Value{type: :string, value: value}, %Trait.Value{
+        type: :string,
+        value: t_value
+      }),
+      do: not String.contains?(t_value, value)
 
   def trait_match(:CONTAINS, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value in t_value
+    do: String.contains?(t_value, value)
 
-  def trait_match(:REGEX, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value == t_value
+  def trait_match(:REGEX, %Trait.Value{type: :string, value: value}, %Trait.Value{
+        type: :string,
+        value: t_value
+      }) do
+    case Regex.compile(value) do
+      {:ok, regex} ->
+        String.match?(t_value, regex)
 
-  def trait_match(:GREATER_THAN, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value > t_value
+      _ ->
+        false
+    end
+  end
+
+  def trait_match(:GREATER_THAN, %Trait.Value{value: value}, %Trait.Value{
+        type: type,
+        value: t_value
+      }) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) == :gt
+      _ -> t_value > value
+    end
+  end
 
   def trait_match(
         :GREATER_THAN_INCLUSIVE,
         %Trait.Value{value: value},
-        %Trait.Value{value: t_value}
-      ),
-      do: value >= t_value
-
-  def trait_match(:LESS_THAN, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value < t_value
-
-  def trait_match(:LESS_THAN_INCLUSIVE, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value <= t_value
-
-  def trait_match(:EQUAL, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value == t_value
-
-  def trait_match(:NOT_EQUAL, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value != t_value
-
-  def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
-      when condition in @condition_operators and not is_struct(not_cast) do
-    case cast_value(t_value_struct, not_cast) do
-      {:ok, cast} -> trait_match(condition, cast, t_value_struct)
-      _ -> false
+        %Trait.Value{type: type, value: t_value}
+      ) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) in [:gt, :eq]
+      _ -> t_value >= value
     end
   end
+
+  def trait_match(:LESS_THAN, %Trait.Value{value: value}, %Trait.Value{type: type, value: t_value}) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) == :lt
+      _ -> t_value < value
+    end
+  end
+
+  def trait_match(:LESS_THAN_INCLUSIVE, %Trait.Value{value: value}, %Trait.Value{
+        type: type,
+        value: t_value
+      }) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) in [:lt, :eq]
+      _ -> t_value <= value
+    end
+  end
+
+  def trait_match(:EQUAL, %Trait.Value{value: value}, %Trait.Value{type: type, value: t_value}) do
+    case type do
+      :decimal -> Decimal.equal?(t_value, value)
+      _ -> t_value == value
+    end
+  end
+
+  def trait_match(:NOT_EQUAL, %Trait.Value{value: value}, %Trait.Value{type: type, value: t_value}) do
+    case type do
+      :decimal -> not Decimal.equal?(t_value, value)
+      _ -> t_value != value
+    end
+  end
+
+  def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
+      when condition in @condition_operators and not is_struct(not_cast) and not is_map(not_cast) do
+    case cast_value(t_value_struct, not_cast) do
+      {:ok, cast} ->
+        trait_match(condition, cast, t_value_struct)
+
+      _ ->
+        false
+    end
+  end
+
+  def trait_match(_, _, _), do: false
 
   defp cast_value(%Trait.Value{} = trait_value, to_convert) do
     with {:ok, converted} <- Trait.Value.convert_value_to(trait_value, to_convert) do

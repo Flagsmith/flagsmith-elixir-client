@@ -27,13 +27,21 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
     do: {:ok, %__MODULE__{value: value, type: String.to_existing_atom(type)}}
 
   def cast(data) when is_number(data),
-    do: {:ok, %__MODULE__{value: Decimal.new(data), type: :decimal}}
+    do: {:ok, %__MODULE__{value: convert_number(data), type: :decimal}}
 
   def cast(%Decimal{} = data),
     do: {:ok, %__MODULE__{value: data, type: :decimal}}
 
   def cast(data) when data in ["false", "true"],
     do: {:ok, %__MODULE__{value: String.to_existing_atom(data), type: :boolean}}
+
+  def cast(data) when data in ["False", "True"],
+    do:
+      {:ok,
+       %__MODULE__{value: String.downcase(data) |> String.to_existing_atom(), type: :boolean}}
+
+  def cast(data) when data in [false, true],
+    do: {:ok, %__MODULE__{value: data, type: :boolean}}
 
   def cast(data) when is_binary(data),
     do: {:ok, %__MODULE__{value: data, type: :string}}
@@ -53,6 +61,14 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
   def dump(data) when data in ["false", "true"],
     do: {:ok, %__MODULE__{value: String.to_existing_atom(data), type: :boolean}}
 
+  def dump(data) when data in ["False", "True"],
+    do:
+      {:ok,
+       %__MODULE__{value: String.downcase(data) |> String.to_existing_atom(), type: :boolean}}
+
+  def dump(data) when data in [false, true],
+    do: {:ok, %__MODULE__{value: data, type: :boolean}}
+
   def dump(data) when is_binary(data),
     do: {:ok, %__MODULE__{value: data, type: :string}}
 
@@ -65,6 +81,10 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
   def equal?(term_1, term_1), do: true
   def equal?(term_1, term_2), do: get_term(term_1) == get_term(term_2)
 
+  def convert_value_to(%__MODULE__{type: :boolean}, to_convert)
+      when to_convert in ["false", "true", "False", "True"],
+      do: cast(to_convert)
+
   def convert_value_to(%__MODULE__{type: type}, to_convert),
     do: Ecto.Type.cast(type, to_convert)
 
@@ -74,4 +94,10 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
       :error -> {:error, data}
     end
   end
+
+  defp convert_number(data) when is_float(data),
+    do: Decimal.from_float(data)
+
+  defp convert_number(data) when is_integer(data) or is_binary(data),
+    do: Decimal.new(data)
 end
