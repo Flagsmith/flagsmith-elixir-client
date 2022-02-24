@@ -2,6 +2,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
   use ExUnit.Case, async: true
 
   alias Flagsmith.Schemas.Traits.Trait
+  alias Flagsmith.Schemas.Segments.Segment
 
   @conditions [
     {:EQUAL, "bar", "bar", true},
@@ -62,5 +63,121 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
 
              assert expected == FlagsmithEngine.trait_match(operator, condition_value, value_form)
            end)
+  end
+
+  @segment_rule_all %Segment.Rule{
+    conditions: [],
+    rules: [
+      %Segment.Rule{
+        conditions: [
+          %Segment.Condition{
+            operator: :EQUAL,
+            property_: "test_true",
+            value: "true"
+          }
+        ],
+        rules: [],
+        type: :ANY
+      },
+      %Segment.Rule{
+        conditions: [
+          %Segment.Condition{
+            operator: :EQUAL,
+            property_: "test_false",
+            value: "false"
+          }
+        ],
+        rules: [],
+        type: :ANY
+      }
+    ],
+    type: :ALL
+  }
+
+  @segment_rule_any %{@segment_rule_all | type: :ANY}
+  @segment_rule_none %{@segment_rule_all | type: :NONE}
+
+  test "Segment.Rule type :ALL" do
+    traits_1 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_all, 1, 1)
+
+    traits_2 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_all, 1, 1)
+  end
+
+  test "Segment.Rule type :ANY" do
+    traits_1 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_any, 1, 1)
+
+    traits_2 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_any, 1, 1)
+  end
+
+  test "Segment.Rule type :NONE" do
+    traits_1 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_none, 1, 1)
+
+    traits_2 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_none, 1, 1)
   end
 end

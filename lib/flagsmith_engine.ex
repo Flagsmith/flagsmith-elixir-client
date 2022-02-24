@@ -154,19 +154,34 @@ defmodule FlagsmithEngine do
 
   def traits_match_segment_rule(
         traits,
-        %Segments.Segment.Rule{rules: rules, conditions: conditions},
+        %Segments.Segment.Rule{type: type, rules: rules, conditions: conditions},
         segment_id,
         identifier
       ) do
-    Enum.all?(conditions, fn condition ->
-      traits_match_segment_condition(traits, condition, segment_id, identifier)
-    end) and
-      Enum.all?(rules, fn rule ->
-        traits_match_segment_rule(traits, rule, segment_id, identifier)
-      end)
+    matching_function = Types.Segment.Type.enum_matching_function(type)
+
+    (length(conditions) == 0 or
+       matching_function.(conditions, fn condition ->
+         traits_match_segment_condition(
+           traits,
+           condition,
+           segment_id,
+           identifier
+         )
+       end)) and
+      (length(rules) == 0 or
+         matching_function.(rules, fn rule ->
+           traits_match_segment_rule(traits, rule, segment_id, identifier)
+         end))
   end
 
-  def traits_match_segment_condition(traits, condition, segment_id, identifier, iterations \\ 1)
+  def traits_match_segment_condition(
+        traits,
+        condition,
+        segment_id,
+        identifier,
+        iterations \\ 1
+      )
 
   def traits_match_segment_condition(
         traits,
@@ -199,21 +214,27 @@ defmodule FlagsmithEngine do
 
   def traits_match_segment_condition(
         traits,
-        %Segments.Segment.Condition{operator: operator, value: value},
+        %Segments.Segment.Condition{operator: operator, value: value, property_: prop},
         _segment_id,
         _identifier,
         _iterations
       ) do
     Enum.all?(traits, fn %Traits.Trait{
-                           trait_key: _t_key,
+                           trait_key: t_key,
                            trait_value: t_value
                          } ->
-      case cast_value(t_value, value) do
-        {:ok, casted} ->
-          trait_match(operator, casted, t_value)
+      case prop == t_key do
+        true ->
+          case cast_value(t_value, value) do
+            {:ok, casted} ->
+              trait_match(operator, casted, t_value)
+
+            _ ->
+              false
+          end
 
         _ ->
-          false
+          true
       end
     end)
   end
