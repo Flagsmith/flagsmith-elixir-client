@@ -270,13 +270,4 @@ defmodule FlagsmithEngineTest do
       assert nil == FlagsmithEngine.get_identity_feature_state(env, identity, "non_existing", [])
     end
   end
-
-  describe "segment <-> trait equality" do
-    setup do
-      [
-        env: FlagsmithEngine.Test.Generators.full_env(),
-        identity: FlagsmithEngine.Test.Generators.identities_list()
-      ]
-    end
-  end
 end
