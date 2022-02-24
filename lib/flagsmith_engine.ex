@@ -7,7 +7,7 @@ defmodule FlagsmithEngine do
   }
 
   alias Traits.Trait
-
+  alias Flagsmith.Schemas.Types
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
 
   @moduledoc """
@@ -154,43 +154,44 @@ defmodule FlagsmithEngine do
 
   def traits_match_segment_rule(
         traits,
-        %Segments.Segment.Rule{rules: rules, conditions: conditions},
+        %Segments.Segment.Rule{type: type, rules: rules, conditions: conditions},
         segment_id,
         identifier
       ) do
-    Enum.all?(conditions, fn condition ->
-      traits_match_segment_condition(traits, condition, segment_id, identifier)
-    end) and
-      Enum.all?(rules, fn rule ->
-        traits_match_segment_rule(traits, rule, segment_id, identifier)
-      end)
-  end
+    matching_function = Types.Segment.Type.enum_matching_function(type)
 
-  def traits_match_segment_condition(traits, condition, segment_id, identifier, iterations \\ 1)
+    (length(conditions) == 0 or
+       matching_function.(conditions, fn condition ->
+         traits_match_segment_condition(
+           traits,
+           condition,
+           segment_id,
+           identifier
+         )
+       end)) and
+      (length(rules) == 0 or
+         matching_function.(rules, fn rule ->
+           traits_match_segment_rule(traits, rule, segment_id, identifier)
+         end))
+  end
 
   def traits_match_segment_condition(
         traits,
-        %Segments.Segment.Condition{operator: :PERCENTAGE_SPLIT, value: value} = condition,
+        condition,
         segment_id,
-        identifier,
-        iterations
+        identifier
+      )
+
+  def traits_match_segment_condition(
+        _traits,
+        %Segments.Segment.Condition{operator: :PERCENTAGE_SPLIT, value: value},
+        segment_id,
+        identifier
       ) do
     with {_, {float, _}} <- {:float_parse, Float.parse(value)},
          {_, percentage} <-
-           {:percentage, percentage_from_ids([segment_id, identifier], iterations)} do
-      case percentage do
-        100 ->
-          traits_match_segment_condition(
-            traits,
-            condition,
-            segment_id,
-            identifier,
-            iterations + 1
-          )
-
-        _ ->
-          percentage <= float
-      end
+           {:percentage, percentage_from_ids([segment_id, identifier], 1)} do
+      percentage <= float
     else
       {_what, _} ->
         false
@@ -199,22 +200,26 @@ defmodule FlagsmithEngine do
 
   def traits_match_segment_condition(
         traits,
-        %Segments.Segment.Condition{operator: operator, value: value},
+        %Segments.Segment.Condition{operator: operator, value: value, property_: prop},
         _segment_id,
-        _identifier,
-        _iterations
+        _identifier
       ) do
     Enum.all?(traits, fn %Traits.Trait{
-                           trait_key: _t_key,
+                           trait_key: t_key,
                            trait_value: t_value
                          } ->
-      case cast_value(t_value, value) do
-        {:ok, casted} ->
-          IO.inspect(op: operator, value: value, t_value: t_value, casted: casted)
-          trait_match(operator, casted, t_value)
+      case prop == t_key do
+        true ->
+          case cast_value(t_value, value) do
+            {:ok, casted} ->
+              trait_match(operator, casted, t_value)
+
+            _ ->
+              false
+          end
 
         _ ->
-          false
+          true
       end
     end)
   end
@@ -222,11 +227,13 @@ defmodule FlagsmithEngine do
   def percentage_from_ids(original_ids, iterations \\ 1) do
     with {_, as_strings} <- {:strings, Enum.map(original_ids, &id_to_string/1)},
          {_, ids} <- {:ids, List.duplicate(as_strings, iterations)},
-         {_, stringed} <- {:join, Enum.join(ids, ",")},
-         {_, hashed} <- {:hash, :crypto.hash(:md5, stringed)},
-         {_, hexed} <- {:hex, Base.hex_encode32(hashed)},
-         {_, {int, _}} <- {:int_parse, Integer.parse(hexed, 32)} do
-      Integer.mod(int, 9999) / 9998 * 100
+         {_, stringed} <- {:join, List.flatten(ids) |> Enum.join(",")},
+         {_, hashed} <- {:hash, FlagsmithEngine.HashingBehaviour.hash(stringed)},
+         {_, {int, _}} <- {:int_parse, Integer.parse(hashed, 16)} do
+      case round(Integer.mod(int, 9999) / 9998 * 100) do
+        100 -> percentage_from_ids(original_ids, iterations + 1)
+        percentage -> percentage
+      end
     else
       {_, _} = error -> {:error, error}
     end
@@ -237,44 +244,97 @@ defmodule FlagsmithEngine do
   def id_to_string(bin) when is_binary(bin), do: bin
   def id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
 
-  def trait_match(:NOT_CONTAINS, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value not in t_value
+  @spec trait_match(
+          condition :: Types.Operator.t(),
+          segment_value :: String.t() | Trait.Value.t(),
+          trait :: Trait.Value.t()
+        ) :: boolean()
+  def trait_match(:NOT_CONTAINS, %Trait.Value{type: :string, value: value}, %Trait.Value{
+        type: :string,
+        value: t_value
+      }),
+      do: not String.contains?(t_value, value)
 
   def trait_match(:CONTAINS, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value in t_value
+    do: String.contains?(t_value, value)
 
-  def trait_match(:REGEX, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value == t_value
+  def trait_match(:REGEX, %Trait.Value{type: :string, value: value}, %Trait.Value{
+        type: :string,
+        value: t_value
+      }) do
+    case Regex.compile(value) do
+      {:ok, regex} ->
+        String.match?(t_value, regex)
 
-  def trait_match(:GREATER_THAN, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value > t_value
+      _ ->
+        false
+    end
+  end
+
+  def trait_match(:GREATER_THAN, %Trait.Value{value: value}, %Trait.Value{
+        type: type,
+        value: t_value
+      }) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) == :gt
+      _ -> t_value > value
+    end
+  end
 
   def trait_match(
         :GREATER_THAN_INCLUSIVE,
         %Trait.Value{value: value},
-        %Trait.Value{value: t_value}
-      ),
-      do: value >= t_value
-
-  def trait_match(:LESS_THAN, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value < t_value
-
-  def trait_match(:LESS_THAN_INCLUSIVE, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value <= t_value
-
-  def trait_match(:EQUAL, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value == t_value
-
-  def trait_match(:NOT_EQUAL, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
-    do: value != t_value
-
-  def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
-      when condition in @condition_operators and not is_struct(not_cast) do
-    case cast_value(t_value_struct, not_cast) do
-      {:ok, cast} -> trait_match(condition, cast, t_value_struct)
-      _ -> false
+        %Trait.Value{type: type, value: t_value}
+      ) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) in [:gt, :eq]
+      _ -> t_value >= value
     end
   end
+
+  def trait_match(:LESS_THAN, %Trait.Value{value: value}, %Trait.Value{type: type, value: t_value}) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) == :lt
+      _ -> t_value < value
+    end
+  end
+
+  def trait_match(:LESS_THAN_INCLUSIVE, %Trait.Value{value: value}, %Trait.Value{
+        type: type,
+        value: t_value
+      }) do
+    case type do
+      :decimal -> Decimal.compare(t_value, value) in [:lt, :eq]
+      _ -> t_value <= value
+    end
+  end
+
+  def trait_match(:EQUAL, %Trait.Value{value: value}, %Trait.Value{type: type, value: t_value}) do
+    case type do
+      :decimal -> Decimal.equal?(t_value, value)
+      _ -> t_value == value
+    end
+  end
+
+  def trait_match(:NOT_EQUAL, %Trait.Value{value: value}, %Trait.Value{type: type, value: t_value}) do
+    case type do
+      :decimal -> not Decimal.equal?(t_value, value)
+      _ -> t_value != value
+    end
+  end
+
+  def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
+      when condition in @condition_operators and not is_struct(not_cast) and not is_map(not_cast) do
+    case cast_value(t_value_struct, not_cast) do
+      {:ok, cast} ->
+        trait_match(condition, cast, t_value_struct)
+
+      _ ->
+        false
+    end
+  end
+
+  def trait_match(_, _, _), do: false
 
   defp cast_value(%Trait.Value{} = trait_value, to_convert) do
     with {:ok, converted} <- Trait.Value.convert_value_to(trait_value, to_convert) do

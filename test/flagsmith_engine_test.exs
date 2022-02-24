@@ -3,6 +3,12 @@ defmodule FlagsmithEngineTest do
 
   alias Flagsmith.Schemas.Features
 
+  # stub the mock so that it calls the normal module as it would under regular usage
+  setup do
+    Mox.stub_with(FlagsmithEngine.MockHashing, FlagsmithEngine.HashingUtils)
+    :ok
+  end
+
   #### NOTE ##
   #### These tests are more in-line with the python tests as they just test
   #### the functionality with a given environment instead of the poller
