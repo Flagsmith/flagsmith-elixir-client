@@ -26,8 +26,6 @@ defmodule FlagsmithEngine.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # "~> 0.1"},
-      {:flagsmith_elixir_sdk, path: "../../flagsmith_elixir_sdk"},
       {:tesla, "~> 1.4"},
       {:jason, "~> 1.2"},
       {:ecto, "~> 3.7.0"},

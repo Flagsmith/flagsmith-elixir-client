@@ -3,24 +3,31 @@ defmodule FlagsmithEngine do
     Environment,
     Traits,
     Segments,
-    Identity,
-    Features
+    Identity
   }
+
+  alias Traits.Trait
+
+  @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
 
   @moduledoc """
   Documentation for `FlagsmithEngine`.
   """
 
-  @api_version "v1"
-  @default_url "https://api.flagsmith.com/api/#{@api_version}/"
-
   @doc """
-  Returns the base url for the target flagsmith instance if provided, defaulting to
-  the public API url.
+  Generate a valid environment struct from a json string or map.
   """
-  @spec api_url() :: String.t()
-  def api_url(),
-    do: Application.get_env(:flagsmith_engine, :api_url, @default_url)
+  @spec parse_environment(data :: map() | String.t()) ::
+          {:ok, Environment.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
+  def parse_environment(data) when is_map(data) and not is_struct(data),
+    do: Environment.cast(data)
+
+  def parse_environment(data) when is_binary(data) do
+    case Jason.decode(data) do
+      {:ok, decoded} -> parse_environment(decoded)
+      {:error, _} = error -> error
+    end
+  end
 
   @doc """
   Get the environment feature states.
@@ -68,8 +75,7 @@ defmodule FlagsmithEngine do
   end
 
   @doc """
-  Get a specific feature state for a given feature_name for a given identity and
-  environment.
+  Get feature state with a given feature_name for a given identity and environment.
   """
   @spec get_identity_feature_state(
           Environment.t(),
@@ -131,8 +137,8 @@ defmodule FlagsmithEngine do
         %Identity{
           identifier: identifier,
           traits: identity_traits
-        } = identity,
-        %Segments.Segment{id: segment_id, rules: rules} = segment,
+        },
+        %Segments.Segment{id: segment_id, rules: rules},
         override_traits
       ) do
     traits =
@@ -191,8 +197,30 @@ defmodule FlagsmithEngine do
     end
   end
 
+  def traits_match_segment_condition(
+        traits,
+        %Segments.Segment.Condition{operator: operator, value: value},
+        _segment_id,
+        _identifier,
+        _iterations
+      ) do
+    Enum.all?(traits, fn %Traits.Trait{
+                           trait_key: _t_key,
+                           trait_value: t_value
+                         } ->
+      case cast_value(t_value, value) do
+        {:ok, casted} ->
+          IO.inspect(op: operator, value: value, t_value: t_value, casted: casted)
+          trait_match(operator, casted, t_value)
+
+        _ ->
+          false
+      end
+    end)
+  end
+
   def percentage_from_ids(original_ids, iterations \\ 1) do
-    with {_, as_strings} <- {:strings, Enum.map(original_ids, &"#{&1}")},
+    with {_, as_strings} <- {:strings, Enum.map(original_ids, &id_to_string/1)},
          {_, ids} <- {:ids, List.duplicate(as_strings, iterations)},
          {_, stringed} <- {:join, Enum.join(ids, ",")},
          {_, hashed} <- {:hash, :crypto.hash(:md5, stringed)},
@@ -204,132 +232,53 @@ defmodule FlagsmithEngine do
     end
   end
 
-  def traits_match_segment_condition(
-        traits,
-        %Segments.Segment.Condition{operator: operator, value: value} = condition,
-        segment_id,
-        identifier,
-        _iterations
-      ) do
-    Enum.all?(traits, fn %Traits.Trait{
-                           trait_key: t_key,
-                           trait_value: t_value
-                         } ->
-      trait_match(operator, value, t_key, t_value)
-    end)
-  end
+  def id_to_string(ids) when is_list(ids), do: Enum.map(ids, &id_to_string/1)
+  def id_to_string(int) when is_integer(int), do: Integer.to_string(int)
+  def id_to_string(bin) when is_binary(bin), do: bin
+  def id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
 
-  def trait_match(:NOT_CONTAINS, value, _t_key, t_value),
+  def trait_match(:NOT_CONTAINS, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value not in t_value
 
-  def trait_match(:CONTAINS, value, _t_key, t_value),
+  def trait_match(:CONTAINS, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value in t_value
 
-  def trait_match(:REGEX, value, _t_key, t_value),
+  def trait_match(:REGEX, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value == t_value
 
-  def trait_match(:GREATER_THAN, value, _t_key, t_value),
+  def trait_match(:GREATER_THAN, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value > t_value
 
-  def trait_match(:GREATER_THAN_INCLUSIVE, value, _t_key, t_value),
-    do: value >= t_value
+  def trait_match(
+        :GREATER_THAN_INCLUSIVE,
+        %Trait.Value{value: value},
+        %Trait.Value{value: t_value}
+      ),
+      do: value >= t_value
 
-  def trait_match(:LESS_THAN, value, _t_key, t_value),
+  def trait_match(:LESS_THAN, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value < t_value
 
-  def trait_match(:LESS_THAN_INCLUSIVE, value, _t_key, t_value),
+  def trait_match(:LESS_THAN_INCLUSIVE, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value <= t_value
 
-  def trait_match(:EQUAL, value, _t_key, t_value),
+  def trait_match(:EQUAL, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value == t_value
 
-  def trait_match(:NOT_EQUAL, value, _t_key, t_value),
+  def trait_match(:NOT_EQUAL, %Trait.Value{value: value}, %Trait.Value{value: t_value}),
     do: value != t_value
 
-  @doc """
-  Returns all feature flags.
-  """
-  @spec get_features() :: list(Features.FeatureState.t())
-  def get_features(identity \\ nil, ets \\ FlagsmithEngine.Poller) do
-    :ets.select(ets, [
-      {
-        {:_, :_, :_, :_, :"$1", :_, :"$3"},
-        maybe_add_identity([], identity),
-        [:"$3"]
-      }
-    ])
-  end
-
-  @doc """
-  Returns a feature by name, if none or more than one feature is found, it returns
-  an error.
-  An optional second argument can be passed to restrict the result to a given 
-  identity.
-  Lastly, if the Poller was started with custom name for the ETS table (maybe multiple
-  instances of Flagsmith) then that name can be passed as the 3rd argument, in order
-  to fetch the feature from that table instead of the default one.
-  """
-  @spec get_feature(name :: String.t(), identity :: String.t() | nil, ets_table_name :: atom()) ::
-          {:ok, Features.FeatureState.t()}
-          | {:error, :not_found}
-          | {:error, {:more_than_one, list(Features.FeatureState.t())}}
-  def get_feature(name, identity \\ nil, ets \\ FlagsmithEngine.Poller) do
-    :ets.select(
-      ets,
-      [
-        {
-          {:_, :_, :_, :_, :"$1", :"$2", :"$3"},
-          maybe_add_identity([{:==, :"$2", name}], identity),
-          [:"$3"]
-        }
-      ]
-    )
-    |> case do
-      [h] -> {:ok, h}
-      [] -> {:error, :not_found}
-      too_many -> {:error, {:more_than_one, too_many}}
+  def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
+      when condition in @condition_operators and not is_struct(not_cast) do
+    case cast_value(t_value_struct, not_cast) do
+      {:ok, cast} -> trait_match(condition, cast, t_value_struct)
+      _ -> false
     end
   end
 
-  @doc """
-  Returns the value of a feature by name, if none or more than one feature is found, 
-  it returns an error.
-  An optional second argument can be passed to restrict the result to a given 
-  identity.
-  Lastly, if the Poller was started with custom name for the ETS table (maybe multiple
-  instances of Flagsmith) then that name can be passed as the 3rd argument, in order
-  to fetch the feature from that table instead of the default one.
-  """
-  @spec get_feature_value(
-          name :: String.t(),
-          identity :: String.t() | nil,
-          ets_table_name :: atom()
-        ) ::
-          {:ok, Features.FeatureState.t()}
-          | {:error, :not_found}
-          | {:error, {:more_than_one, list(Features.FeatureState.t())}}
-  def get_feature_value(name, identity \\ nil, ets \\ FlagsmithEngine.Poller) do
-    :ets.select(
-      ets,
-      [
-        {
-          {:_, :_, :_, :_, :"$1", :"$2", :"$3"},
-          maybe_add_identity([{:==, :"$2", name}], identity),
-          [:"$3"]
-        }
-      ]
-    )
-    |> case do
-      [%{feature_state_value: value}] -> {:ok, value}
-      [] -> {:error, :not_found}
-      too_many -> {:error, {:more_than_one, too_many}}
-    end
-  end
-
-  defp maybe_add_identity(clauses, identity) do
-    case identity do
-      nil -> clauses
-      _ -> [{:==, :"$1", identity} | clauses]
+  defp cast_value(%Trait.Value{} = trait_value, to_convert) do
+    with {:ok, converted} <- Trait.Value.convert_value_to(trait_value, to_convert) do
+      Trait.Value.cast(converted)
     end
   end
 end

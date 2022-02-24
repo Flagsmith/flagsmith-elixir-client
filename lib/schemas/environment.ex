@@ -31,6 +31,13 @@ defmodule Flagsmith.Schemas.Environment do
     |> cast_embed(:heap_config)
   end
 
+  @spec cast(map()) :: {:ok, __MODULE__.t()} | {:error, Ecto.Changeset.t()}
+  def cast(json_map) do
+    json_map
+    |> changeset()
+    |> apply_action(:insert)
+  end
+
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

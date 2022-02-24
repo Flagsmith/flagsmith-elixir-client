@@ -11,14 +11,14 @@ defmodule Flagsmith.Schemas.Segments.Segment.Condition do
   typed_embedded_schema do
     field(:operator, Flagsmith.Schemas.Types.Operator)
     field(:value, :string)
-    field(:property, :string)
+    field(:property_, :string)
   end
 
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [:operator, :value, :property])
+    |> cast(params, [:operator, :value, :property_])
   end
 
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()

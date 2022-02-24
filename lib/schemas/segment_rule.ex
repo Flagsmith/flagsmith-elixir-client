@@ -11,7 +11,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Rule do
 
   @primary_key false
   typed_embedded_schema do
-    field(:type, :string)
+    field(:type, Flagsmith.Schemas.Types.Segment.Type)
     embeds_many(:rules, __MODULE__)
     embeds_many(:conditions, Segment.Condition)
   end

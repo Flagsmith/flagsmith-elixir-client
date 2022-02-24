@@ -1,161 +1,177 @@
 defmodule FlagsmithEngineTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   alias Flagsmith.Schemas.Features
 
   #### NOTE ##
-  #### This first set of tests are for the engine but using the poller arch
-  #### the tests that replicate those in the python suite are afterwards and
-  #### noted liked these
-
-  import FlagsmithEngine.Test.Helpers, only: [ensure_no_poller: 1]
-  import Mox, only: [verify_on_exit!: 1, expect: 3, allow: 3]
-
-  # setup Mox to verify any expectations 
-  setup :verify_on_exit!
-
-  # we make sure the poller is not running at the beginning of any test if it is
-  # we shut it down so that it no longer is and can start fresh when needed
-  setup :ensure_no_poller
-
-  test "returns the default base url" do
-    assert "https://api.flagsmith.com/api/v1/" == FlagsmithEngine.api_url()
-  end
-
-  test "returns the url if set on the application env" do
-    test_url = "https://test.com"
-
-    Application.put_env(:flagsmith_engine, :api_url, test_url)
-
-    assert test_url == FlagsmithEngine.api_url()
-
-    Application.delete_env(:flagsmith_engine, :api_url)
-  end
-
-  describe "querying" do
-    setup do
-      # generate 4 json entries
-      features_json =
-        Enum.map(1..4, fn x ->
-          FlagsmithEngine.Test.Generators.full_feature_json("feat#{x}", %{
-            value: "val#{x}",
-            description: "descript#{x}",
-            identity: rem(x, 2)
-          })
-        end)
-
-      # set expectation for the adapter and make the response be the list of
-      # features as the json that would be given by the API
-      expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
-        {:ok, %Tesla.Env{status: 200, body: features_json}}
-      end)
-
-      # Start the poller
-      assert {:ok, pid} = FlagsmithEngine.Poller.start_link(api_key: "test")
-      # Since it's the poller doing the http request (and it's a different process
-      # than the one running the test), we need to explictly say that that process
-      # is allowed to trigger the expectations set by this (self()) process
-      allow(Tesla.Adapter.Mock, self(), pid)
-
-      # ensure the statem is loaded and ready by doing a synchronous call
-      assert {:loaded, _} = :sys.get_state(pid)
-
-      [features: features_json]
-    end
-
-    test "querying by feature name", %{features: [feat_1 | _]} do
-      name = feat_1["feature"]["name"]
-
-      assert {
-               :ok,
-               %Flagsmith.API.FeatureStateSerializerFull{
-                 feature: %Flagsmith.API.Feature{name: ^name}
-               }
-             } = FlagsmithEngine.get_feature(name)
-    end
-
-    test "querying a non existing feature by name returns error" do
-      assert {:error, :not_found} = FlagsmithEngine.get_feature("non_existing")
-    end
-
-    test "querying by feature name with identity", %{features: [feat_1 | _]} do
-      name = feat_1["feature"]["name"]
-      identity = feat_1["identity"]
-
-      assert {
-               :ok,
-               %Features.FeatureState{
-                 feature: %Features.Feature{name: ^name}
-               }
-             } = FlagsmithEngine.get_feature(name, identity)
-    end
-
-    test "querying by feature name with wrong identity returns error", %{features: [feat_1 | _]} do
-      name = feat_1["feature"]["name"]
-
-      assert {:error, :not_found} = FlagsmithEngine.get_feature(name, 10_000)
-    end
-
-    test "get_flags", %{features: feats_json} do
-      assert feats = FlagsmithEngine.get_features()
-      assert is_list(feats) and length(feats) == length(feats_json)
-
-      assert Enum.all?(feats_json, fn %{"id" => id, "feature" => %{"name" => name}} ->
-               Enum.any?(feats, fn %{id: f_id, feature: %{name: f_name}} ->
-                 f_id == id && f_name == name
-               end)
-             end)
-    end
-
-    test "get_flags with identity", %{features: [feat_1 | _] = feats_json} do
-      assert identity = feat_1["identity"]
-
-      only_identity =
-        Enum.filter(feats_json, fn %{"identity" => id} ->
-          id == identity
-        end)
-
-      # assert that there's at least some filtered feat, but also that the total is
-      # less than the non-filtered total to make sure the expectations are correct
-      # down the line
-      assert length(only_identity) > 0 && length(only_identity) < length(feats_json)
-
-      assert feats = FlagsmithEngine.get_features(identity)
-
-      assert is_list(feats) and length(feats) == length(only_identity)
-
-      assert Enum.all?(only_identity, fn %{"id" => id, "feature" => %{"name" => name}} ->
-               Enum.any?(feats, fn %{id: f_id, feature: %{name: f_name}} ->
-                 f_id == id && f_name == name
-               end)
-             end)
-    end
-
-    test "get_feature_value", %{features: [feat_1 | _]} do
-      name = feat_1["feature"]["name"]
-      value = feat_1["feature_state_value"]
-
-      assert {:ok, ^value} = FlagsmithEngine.get_feature_value(name)
-    end
-
-    test "get_feature_value w/ identity", %{features: [feat_1 | _]} do
-      name = feat_1["feature"]["name"]
-      identity = feat_1["identity"]
-      value = feat_1["feature_state_value"]
-
-      assert {:ok, ^value} = FlagsmithEngine.get_feature_value(name, identity)
-    end
-
-    test "get_feature_value w/ wrong identity returns error", %{features: [feat_1 | _]} do
-      name = feat_1["feature"]["name"]
-
-      assert {:error, :not_found} = FlagsmithEngine.get_feature_value(name, 10_000)
-    end
-  end
-
-  #### NOTE ##
   #### These tests are more in-line with the python tests as they just test
-  #### the functionality with a given environment instead of the poller 
+  #### the functionality with a given environment instead of the poller
+
+  test "parsing a json string into an environment struct" do
+    assert {:ok, env_map} = Jason.decode(FlagsmithEngine.Test.Generators.json_env())
+
+    assert {:ok,
+            %Flagsmith.Schemas.Environment{
+              amplitude_config: nil,
+              api_key: "cU3oztxgvRgZifpLepQJTX",
+              feature_states: [
+                %Flagsmith.Schemas.Environment.FeatureState{
+                  django_id: 72267,
+                  enabled: false,
+                  feature: %Flagsmith.Schemas.Environment.Feature{
+                    id: 13534,
+                    name: "header_size",
+                    type: "MULTIVARIATE"
+                  },
+                  feature_state_value: "24px",
+                  featurestate_uuid: "79f20ade-c211-48fd-9be7-b759079526ca",
+                  multivariate_feature_state_values: [
+                    %Flagsmith.Schemas.Environment.MultivariateFeatureStateValue{
+                      id: 2915,
+                      multivariate_feature_option:
+                        %Flagsmith.Schemas.Environment.MultivariateFeatureOption{
+                          id: 849,
+                          value: "34px"
+                        },
+                      mv_fs_value_uuid: "d6ce29da-a737-45ec-a144-c95b1c64922b",
+                      percentage_allocation: 80.0
+                    }
+                  ]
+                },
+                %Flagsmith.Schemas.Environment.FeatureState{
+                  django_id: 72269,
+                  enabled: false,
+                  feature: %Flagsmith.Schemas.Environment.Feature{
+                    id: 13535,
+                    name: "body_size",
+                    type: "STANDARD"
+                  },
+                  feature_state_value: "18px",
+                  featurestate_uuid: "a1073731-f657-4348-8a39-e2bf1b5127a6",
+                  multivariate_feature_state_values: []
+                },
+                %Flagsmith.Schemas.Environment.FeatureState{
+                  django_id: 92461,
+                  enabled: true,
+                  feature: %Flagsmith.Schemas.Environment.Feature{
+                    id: 17985,
+                    name: "secret_button",
+                    type: "STANDARD"
+                  },
+                  feature_state_value: "{\"colour\": \"#ababab\"}",
+                  featurestate_uuid: "07cd43fb-405a-4c7a-8409-208f1739cda2",
+                  multivariate_feature_state_values: []
+                },
+                %Flagsmith.Schemas.Environment.FeatureState{
+                  django_id: 94235,
+                  enabled: true,
+                  feature: %Flagsmith.Schemas.Environment.Feature{
+                    id: 18382,
+                    name: "test_identity",
+                    type: "STANDARD"
+                  },
+                  feature_state_value: "very_yes",
+                  featurestate_uuid: "cfcedb16-47ab-4a48-97c6-46bfd0c6df69",
+                  multivariate_feature_state_values: []
+                }
+              ],
+              heap_config: nil,
+              id: 11278,
+              mixpanel_config: nil,
+              project: %Flagsmith.Schemas.Environment.Project{
+                hide_disabled_flags: false,
+                id: 4732,
+                name: "testing-api",
+                organisation: %Flagsmith.Schemas.Environment.Organisation{
+                  feature_analytics: false,
+                  id: 4131,
+                  name: "Mr. Bojangles Inc",
+                  persist_trait_data: true,
+                  stop_serving_flags: false
+                },
+                segments: [
+                  %Flagsmith.Schemas.Segments.Segment{
+                    feature_states: [
+                      %Flagsmith.Schemas.Environment.FeatureState{
+                        django_id: 95632,
+                        enabled: false,
+                        feature: %Flagsmith.Schemas.Environment.Feature{
+                          id: 17985,
+                          name: "secret_button",
+                          type: "STANDARD"
+                        },
+                        feature_state_value: nil,
+                        featurestate_uuid: "31d12712-2505-4555-a4f1-ea433feac701",
+                        multivariate_feature_state_values: []
+                      }
+                    ],
+                    id: 5241,
+                    name: "test_segment",
+                    rules: [
+                      %Flagsmith.Schemas.Segments.Segment.Rule{
+                        conditions: [],
+                        rules: [
+                          %Flagsmith.Schemas.Segments.Segment.Rule{
+                            conditions: [
+                              %Flagsmith.Schemas.Segments.Segment.Condition{
+                                operator: :EQUAL,
+                                property_: "show_popup",
+                                value: "false"
+                              }
+                            ],
+                            rules: [],
+                            type: :ANY
+                          }
+                        ],
+                        type: :ALL
+                      }
+                    ]
+                  },
+                  %Flagsmith.Schemas.Segments.Segment{
+                    feature_states: [
+                      %Flagsmith.Schemas.Environment.FeatureState{
+                        django_id: 95631,
+                        enabled: false,
+                        feature: %Flagsmith.Schemas.Environment.Feature{
+                          id: 17985,
+                          name: "secret_button",
+                          type: "STANDARD"
+                        },
+                        feature_state_value: nil,
+                        featurestate_uuid: "82de5342-1a4d-438e-9a8f-6b6cb2c2404c",
+                        multivariate_feature_state_values: []
+                      }
+                    ],
+                    id: 5243,
+                    name: "test_perc",
+                    rules: [
+                      %Flagsmith.Schemas.Segments.Segment.Rule{
+                        conditions: [],
+                        rules: [
+                          %Flagsmith.Schemas.Segments.Segment.Rule{
+                            conditions: [
+                              %Flagsmith.Schemas.Segments.Segment.Condition{
+                                operator: :PERCENTAGE_SPLIT,
+                                property_: nil,
+                                value: "30"
+                              }
+                            ],
+                            rules: [],
+                            type: :ANY
+                          }
+                        ],
+                        type: :ALL
+                      }
+                    ]
+                  }
+                ]
+              },
+              segment_config: nil
+            } = parsed} = FlagsmithEngine.parse_environment(env_map)
+
+    assert env_map_2 = FlagsmithEngine.Test.Generators.json_env()
+    assert {:ok, ^parsed} = FlagsmithEngine.parse_environment(env_map_2)
+  end
 
   describe "engine with environment" do
     setup do
@@ -246,6 +262,15 @@ defmodule FlagsmithEngineTest do
 
     test "get_identity_feature_state/4 with non-existing feature", %{env: env, identity: identity} do
       assert nil == FlagsmithEngine.get_identity_feature_state(env, identity, "non_existing", [])
+    end
+  end
+
+  describe "segment <-> trait equality" do
+    setup do
+      [
+        env: FlagsmithEngine.Test.Generators.full_env(),
+        identity: FlagsmithEngine.Test.Generators.identities_list()
+      ]
     end
   end
 end
