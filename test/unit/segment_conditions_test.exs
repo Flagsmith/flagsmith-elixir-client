@@ -180,4 +180,145 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
 
     refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_none, 1, 1)
   end
+
+  @segment_rule_nested_all %Segment.Rule{
+    conditions: [],
+    rules: [
+      %Segment.Rule{
+        conditions: [
+          %Segment.Condition{
+            operator: :EQUAL,
+            property_: "test_true",
+            value: "true"
+          }
+        ],
+        rules: [
+          %Segment.Rule{
+            conditions: [
+              %Segment.Condition{
+                operator: :EQUAL,
+                property_: "test_false",
+                value: "false"
+              }
+            ],
+            rules: [],
+            type: :ALL
+          }
+        ],
+        type: :ALL
+      }
+    ],
+    type: :ALL
+  }
+
+  test "Segment.Rule type :ALL nested" do
+    traits_1 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_nested_all, 1, 1)
+
+    # test_false is in the inner rule condition, so for it to fail it means that rule
+    # had to be evaluated, so we set its value as true to not match the condition
+    traits_2 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_nested_all, 1, 1)
+  end
+
+  @segment_rule_nested_any %Segment.Rule{
+    conditions: [],
+    rules: [
+      %Segment.Rule{
+        conditions: [
+          %Segment.Condition{
+            operator: :EQUAL,
+            property_: "test_true",
+            value: "true"
+          }
+        ],
+        rules: [
+          %Segment.Rule{
+            conditions: [
+              %Segment.Condition{
+                operator: :EQUAL,
+                property_: "test_false",
+                value: "false"
+              },
+              %Segment.Condition{
+                operator: :EQUAL,
+                property_: "test_false",
+                value: "true"
+              }
+            ],
+            rules: [],
+            type: :ANY
+          }
+        ],
+        type: :ALL
+      }
+    ],
+    type: :ALL
+  }
+
+  test "Segment.Rule type :ANY nested" do
+    # test_false is in the inner rule condition, there's two inner conditions for the
+    # it, both equals for false and true, so it should always test true with `ANY`
+    traits_1 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_nested_any, 1, 1)
+
+    # now with false, so we can test that either condition works
+    traits_2 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    assert FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_nested_any, 1, 1)
+
+    # test_false is in the inner rule condition, so for it to fail it means that rule
+    # had to be evaluated, so we set its value as a non matching type
+    traits_3 = [
+      %Trait{
+        trait_key: "test_true",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_false",
+        trait_value: %Trait.Value{value: Decimal.new(1), type: :decimal}
+      }
+    ]
+
+    refute FlagsmithEngine.traits_match_segment_rule(traits_3, @segment_rule_nested_any, 1, 1)
+  end
 end
