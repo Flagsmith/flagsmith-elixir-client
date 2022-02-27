@@ -1,4 +1,4 @@
-defmodule FlagsmithEngine.SegmentConditionsTest do
+defmodule Flagsmith.Engine.SegmentConditionsTest do
   use ExUnit.Case, async: true
 
   alias Flagsmith.Schemas.Traits.Trait
@@ -61,7 +61,8 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
     assert Enum.all?(@conditions, fn {operator, trait_value, condition_value, expected} ->
              assert {:ok, value_form} = Trait.Value.cast(trait_value)
 
-             assert expected == FlagsmithEngine.trait_match(operator, condition_value, value_form)
+             assert expected ==
+                      Flagsmith.Engine.trait_match(operator, condition_value, value_form)
            end)
   end
 
@@ -109,7 +110,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_all, 1, 1)
+    assert Flagsmith.Engine.traits_match_segment_rule(traits_1, @segment_rule_all, 1, 1)
 
     traits_2 = [
       %Trait{
@@ -122,7 +123,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_all, 1, 1)
+    refute Flagsmith.Engine.traits_match_segment_rule(traits_2, @segment_rule_all, 1, 1)
   end
 
   test "Segment.Rule type :ANY" do
@@ -137,7 +138,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_any, 1, 1)
+    assert Flagsmith.Engine.traits_match_segment_rule(traits_1, @segment_rule_any, 1, 1)
 
     traits_2 = [
       %Trait{
@@ -150,7 +151,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_any, 1, 1)
+    refute Flagsmith.Engine.traits_match_segment_rule(traits_2, @segment_rule_any, 1, 1)
   end
 
   test "Segment.Rule type :NONE" do
@@ -165,7 +166,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_none, 1, 1)
+    assert Flagsmith.Engine.traits_match_segment_rule(traits_1, @segment_rule_none, 1, 1)
 
     traits_2 = [
       %Trait{
@@ -178,7 +179,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_none, 1, 1)
+    refute Flagsmith.Engine.traits_match_segment_rule(traits_2, @segment_rule_none, 1, 1)
   end
 
   @segment_rule_nested_all %Segment.Rule{
@@ -223,7 +224,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_nested_all, 1, 1)
+    assert Flagsmith.Engine.traits_match_segment_rule(traits_1, @segment_rule_nested_all, 1, 1)
 
     # test_false is in the inner rule condition, so for it to fail it means that rule
     # had to be evaluated, so we set its value as true to not match the condition
@@ -238,7 +239,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    refute FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_nested_all, 1, 1)
+    refute Flagsmith.Engine.traits_match_segment_rule(traits_2, @segment_rule_nested_all, 1, 1)
   end
 
   @segment_rule_nested_any %Segment.Rule{
@@ -290,7 +291,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    assert FlagsmithEngine.traits_match_segment_rule(traits_1, @segment_rule_nested_any, 1, 1)
+    assert Flagsmith.Engine.traits_match_segment_rule(traits_1, @segment_rule_nested_any, 1, 1)
 
     # now with false, so we can test that either condition works
     traits_2 = [
@@ -304,7 +305,7 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    assert FlagsmithEngine.traits_match_segment_rule(traits_2, @segment_rule_nested_any, 1, 1)
+    assert Flagsmith.Engine.traits_match_segment_rule(traits_2, @segment_rule_nested_any, 1, 1)
 
     # test_false is in the inner rule condition, so for it to fail it means that rule
     # had to be evaluated, so we set its value as a non matching type
@@ -319,6 +320,6 @@ defmodule FlagsmithEngine.SegmentConditionsTest do
       }
     ]
 
-    refute FlagsmithEngine.traits_match_segment_rule(traits_3, @segment_rule_nested_any, 1, 1)
+    refute Flagsmith.Engine.traits_match_segment_rule(traits_3, @segment_rule_nested_any, 1, 1)
   end
 end

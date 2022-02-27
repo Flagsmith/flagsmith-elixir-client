@@ -1,10 +1,10 @@
-defmodule FlagsmithEngine.HashingTest do
+defmodule Flagsmith.Engine.HashingTest do
   use ExUnit.Case, async: false
 
   import Mox, only: [stub_with: 2, verify_on_exit!: 1, expect: 3]
 
   setup do
-    stub_with(FlagsmithEngine.MockHashing, FlagsmithEngine.HashingUtils)
+    stub_with(Flagsmith.Engine.MockHashing, Flagsmith.Engine.HashingUtils)
     :ok
   end
 
@@ -12,7 +12,7 @@ defmodule FlagsmithEngine.HashingTest do
   # the more it verifies those assertions are correct if they pass. If for some
   # reason a test using it fails, it must be either a bug on the implementation
   # or a logical error on the test/assumptions
-  def generate_random_ids(n_a \\ 2, n_b \\ 5) do
+  def generate_random_ids(n_a \\ 5, n_b \\ 2) do
     Enum.reduce(1..n_a, [], fn _, acc ->
       row =
         Enum.reduce(1..n_b, [], fn _, acc_row ->
@@ -24,39 +24,34 @@ defmodule FlagsmithEngine.HashingTest do
 
           [new_val | acc_row]
         end)
+        |> Enum.reverse()
 
       [row | acc]
     end)
   end
 
   test "percentage between 0 and 100" do
-    ids = generate_random_ids()
-
-    percentage = FlagsmithEngine.percentage_from_ids(ids)
-
-    assert 100 > percentage and percentage >= 0
+    generate_random_ids()
+    |> Enum.each(fn ids ->
+      percentage = Flagsmith.Engine.percentage_from_ids(ids)
+      assert 100 > percentage and percentage >= 0
+    end)
   end
 
   test "percentage is the same when run multiple times with the same ids" do
-    ids = generate_random_ids()
-    assert FlagsmithEngine.percentage_from_ids(ids) == FlagsmithEngine.percentage_from_ids(ids)
+    generate_random_ids()
+    |> Enum.each(fn ids ->
+      assert Flagsmith.Engine.percentage_from_ids(ids) ==
+               Flagsmith.Engine.percentage_from_ids(ids)
+    end)
   end
 
   test "percentage is different between different ids" do
     ids_1 = [10, 5200]
     ids_2 = [5200, 11]
 
-    assert FlagsmithEngine.percentage_from_ids(ids_1) !=
-             FlagsmithEngine.percentage_from_ids(ids_2)
-  end
-
-  # ##QA## is this expected? 
-  test "percentage is the same between same ids in different order" do
-    ids_1 = [10, 5200]
-    ids_2 = [5200, 10]
-
-    assert FlagsmithEngine.percentage_from_ids(ids_1) ==
-             FlagsmithEngine.percentage_from_ids(ids_2)
+    assert Flagsmith.Engine.percentage_from_ids(ids_1) !=
+             Flagsmith.Engine.percentage_from_ids(ids_2)
   end
 
   test "ids are evenly distributed" do
@@ -69,7 +64,7 @@ defmodule FlagsmithEngine.HashingTest do
 
     values =
       ids
-      |> Enum.map(&FlagsmithEngine.percentage_from_ids(&1))
+      |> Enum.map(&Flagsmith.Engine.percentage_from_ids(&1))
       |> Enum.sort()
 
     for i <- 1..buckets do
@@ -99,24 +94,24 @@ defmodule FlagsmithEngine.HashingTest do
     # ids used to hash) it should follow that if the first call returns 100 the hashing
     # function should be called again, hence why we set up 2 expectations
 
-    test "hash_percentage doesn't return 1" do
+    test "percentage_from_ids doesn't return 100 as percentage" do
       # the first time it's called it will return a string that parses to 100 so it
       # percentage_from_ids/1 should call again the hash util in order to get a new
       # try at hashing until it's no longer 100
-      expect(FlagsmithEngine.MockHashing, :hash, fn stringed ->
+      expect(Flagsmith.Engine.MockHashing, :hash, fn stringed ->
         assert stringed == "12,93"
         "270e"
       end)
 
       # this second time this string parses to 0
-      expect(FlagsmithEngine.MockHashing, :hash, fn stringed ->
+      expect(Flagsmith.Engine.MockHashing, :hash, fn stringed ->
         assert stringed == "12,93,12,93"
         "270f"
       end)
 
       object_ids = [12, 93]
 
-      value = FlagsmithEngine.percentage_from_ids(object_ids)
+      value = Flagsmith.Engine.percentage_from_ids(object_ids)
 
       # the value is 0 as defined by the second call to the mock
       assert value == 0

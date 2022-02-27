@@ -10,16 +10,12 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
   @primary_key false
   typed_embedded_schema do
     field(:enabled, :boolean)
-
     field(:environment, :integer)
-
     field(:feature_segment, :integer)
-
     field(:feature_state_value, :string)
-
     field(:id, :integer)
-
     field(:identity, :integer)
+
     embeds_one(:feature, Flagsmith.Schemas.Features.Feature)
   end
 

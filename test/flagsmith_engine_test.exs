@@ -1,11 +1,11 @@
-defmodule FlagsmithEngineTest do
+defmodule Flagsmith.EngineTest do
   use ExUnit.Case, async: true
 
   alias Flagsmith.Schemas.Features
 
   # stub the mock so that it calls the normal module as it would under regular usage
   setup do
-    Mox.stub_with(FlagsmithEngine.MockHashing, FlagsmithEngine.HashingUtils)
+    Mox.stub_with(Flagsmith.Engine.MockHashing, Flagsmith.Engine.HashingUtils)
     :ok
   end
 
@@ -14,7 +14,7 @@ defmodule FlagsmithEngineTest do
   #### the functionality with a given environment instead of the poller
 
   test "parsing a json string into an environment struct" do
-    assert {:ok, env_map} = Jason.decode(FlagsmithEngine.Test.Generators.json_env())
+    assert {:ok, env_map} = Jason.decode(Flagsmith.Engine.Test.Generators.json_env())
 
     assert {:ok,
             %Flagsmith.Schemas.Environment{
@@ -173,15 +173,15 @@ defmodule FlagsmithEngineTest do
                 ]
               },
               segment_config: nil
-            } = parsed} = FlagsmithEngine.parse_environment(env_map)
+            } = parsed} = Flagsmith.Engine.parse_environment(env_map)
 
-    assert env_map_2 = FlagsmithEngine.Test.Generators.json_env()
-    assert {:ok, ^parsed} = FlagsmithEngine.parse_environment(env_map_2)
+    assert env_map_2 = Flagsmith.Engine.Test.Generators.json_env()
+    assert {:ok, ^parsed} = Flagsmith.Engine.parse_environment(env_map_2)
   end
 
   describe "engine with environment" do
     setup do
-      [env: FlagsmithEngine.Test.Generators.full_env()]
+      [env: Flagsmith.Engine.Test.Generators.full_env()]
     end
 
     test "get_environment_feature_states/1 when project hide_disabled is false", %{
@@ -191,12 +191,12 @@ defmodule FlagsmithEngineTest do
       # note for non elixir devs the ^ (pin) operator on the left side of a match (=)
       # forces the variable to be exactly the one that was pinned instead of doing
       # re-assignement, it would be equivalent to doing var == something
-      assert ^feature_states = FlagsmithEngine.get_environment_feature_states(env)
+      assert ^feature_states = Flagsmith.Engine.get_environment_feature_states(env)
     end
 
     test "get_environment_feature_states/1 when project hide_disabled is true", %{env: env} do
       new_env = %{env | project: %{env.project | hide_disabled_flags: true}}
-      assert [] = FlagsmithEngine.get_environment_feature_states(new_env)
+      assert [] = Flagsmith.Engine.get_environment_feature_states(new_env)
     end
 
     test "get_environment_feature_states/1 when project hide_disabled is true and some flag(s) are enabled",
@@ -211,21 +211,21 @@ defmodule FlagsmithEngineTest do
           feature_states: new_feature_states
       }
 
-      assert [^new_first_feature_state] = FlagsmithEngine.get_environment_feature_states(new_env)
+      assert [^new_first_feature_state] = Flagsmith.Engine.get_environment_feature_states(new_env)
     end
 
     test "get_environment_feature_state/2", %{env: env} do
       [%{feature: %{name: name}} = first_feature_state | _] = env.feature_states
 
-      assert ^first_feature_state = FlagsmithEngine.get_environment_feature_state(env, name)
+      assert ^first_feature_state = Flagsmith.Engine.get_environment_feature_state(env, name)
     end
   end
 
   describe "engine identity environment" do
     setup do
       [
-        env: FlagsmithEngine.Test.Generators.full_env(),
-        identity: FlagsmithEngine.Test.Generators.identities_list()
+        env: Flagsmith.Engine.Test.Generators.full_env(),
+        identity: Flagsmith.Engine.Test.Generators.identities_list()
       ]
     end
 
@@ -247,7 +247,7 @@ defmodule FlagsmithEngineTest do
                %Features.FeatureState{},
                %Features.FeatureState{},
                %Features.FeatureState{}
-             ] = FlagsmithEngine.get_identity_feature_states(env, identity, [])
+             ] = Flagsmith.Engine.get_identity_feature_states(env, identity, [])
     end
 
     test "get_identity_feature_state/4", %{env: env, identity: identity} do
@@ -263,11 +263,11 @@ defmodule FlagsmithEngineTest do
                feature_segment: nil,
                feature_state_value: "34px",
                identity: nil
-             } = FlagsmithEngine.get_identity_feature_state(env, identity, "header_size", [])
+             } = Flagsmith.Engine.get_identity_feature_state(env, identity, "header_size", [])
     end
 
     test "get_identity_feature_state/4 with non-existing feature", %{env: env, identity: identity} do
-      assert nil == FlagsmithEngine.get_identity_feature_state(env, identity, "non_existing", [])
+      assert nil == Flagsmith.Engine.get_identity_feature_state(env, identity, "non_existing", [])
     end
   end
 end

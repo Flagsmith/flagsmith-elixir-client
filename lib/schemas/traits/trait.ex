@@ -20,4 +20,11 @@ defmodule Flagsmith.Schemas.Traits.Trait do
     |> cast(params, [:trait_value, :trait_key, :id])
     |> validate_required([:trait_value, :trait_key])
   end
+
+  def extract_trait_value(key, traits) do
+    case Enum.find(traits, fn %{trait_key: t_key} -> key == t_key end) do
+      %__MODULE__{trait_value: %{value: value}} -> {:ok, value}
+      _ -> {:error, :not_found}
+    end
+  end
 end
