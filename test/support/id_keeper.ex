@@ -1,4 +1,4 @@
-defmodule FlagsmithEngine.Test.IDKeeper do
+defmodule Flagsmith.Engine.Test.IDKeeper do
   use Agent
 
   def start_link(),

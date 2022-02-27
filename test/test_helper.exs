@@ -1,7 +1,7 @@
-Mox.defmock(FlagsmithEngine.MockHashing, for: FlagsmithEngine.HashingBehaviour)
-Application.put_env(FlagsmithEngine, :hash_module, FlagsmithEngine.MockHashing)
+Mox.defmock(Flagsmith.Engine.MockHashing, for: Flagsmith.Engine.HashingBehaviour)
+Application.put_env(Flagsmith.Engine, :hash_module, Flagsmith.Engine.MockHashing)
 
 ## Id keeper - agent so we can just use this to retrieve new ids
-FlagsmithEngine.Test.IDKeeper.start_link()
+Flagsmith.Engine.Test.IDKeeper.start_link()
 
 ExUnit.start()

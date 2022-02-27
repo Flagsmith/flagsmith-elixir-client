@@ -1,4 +1,4 @@
-defmodule FlagsmithEngine.Test.Generators do
+defmodule Flagsmith.Engine.Test.Generators do
   alias Flagsmith.Schemas.{Environment, Segments, Identity, Features, Traits}
   alias Flagsmith.Schemas.Traits.Trait.Value
 
@@ -241,7 +241,7 @@ defmodule FlagsmithEngine.Test.Generators do
       "environment" => Map.get(opts, :environment),
       "feature_segment" => Map.get(opts, :segment),
       "feature_state_value" => Map.get(opts, :value),
-      "id" => FlagsmithEngine.Test.IDKeeper.get_and_update(),
+      "id" => Flagsmith.Engine.Test.IDKeeper.get_and_update(),
       "identity" => Map.get(opts, :identity),
       "feature" => feature_json(name, opts)
     }
@@ -257,7 +257,7 @@ defmodule FlagsmithEngine.Test.Generators do
       "description" => Map.get(opts, :description),
       "initial_value" => Map.get(opts, :value),
       "type" => Map.get(opts, :type),
-      "id" => FlagsmithEngine.Test.IDKeeper.get_and_update()
+      "id" => Flagsmith.Engine.Test.IDKeeper.get_and_update()
     }
   end
 end

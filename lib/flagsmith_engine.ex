@@ -1,4 +1,4 @@
-defmodule FlagsmithEngine do
+defmodule Flagsmith.Engine do
   alias Flagsmith.Schemas.{
     Environment,
     Traits,
@@ -11,7 +11,7 @@ defmodule FlagsmithEngine do
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
 
   @moduledoc """
-  Documentation for `FlagsmithEngine`.
+  Documentation for `Flagsmith.Engine`.
   """
 
   @doc """
@@ -228,7 +228,7 @@ defmodule FlagsmithEngine do
     with {_, as_strings} <- {:strings, Enum.map(original_ids, &id_to_string/1)},
          {_, ids} <- {:ids, List.duplicate(as_strings, iterations)},
          {_, stringed} <- {:join, List.flatten(ids) |> Enum.join(",")},
-         {_, hashed} <- {:hash, FlagsmithEngine.HashingBehaviour.hash(stringed)},
+         {_, hashed} <- {:hash, Flagsmith.Engine.HashingBehaviour.hash(stringed)},
          {_, {int, _}} <- {:int_parse, Integer.parse(hashed, 16)} do
       case round(Integer.mod(int, 9999) / 9998 * 100) do
         100 -> percentage_from_ids(original_ids, iterations + 1)

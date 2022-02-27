@@ -10,7 +10,7 @@ defmodule Flagsmith.Schemas.Identity do
   @primary_key false
   typed_embedded_schema do
     field(:identifier, :string)
-    embeds_many(:flags, Flagsmith.Schemas.Identity.FeatureState)
+    embeds_many(:flags, Flagsmith.Schemas.Features.FeatureState)
     embeds_many(:traits, Flagsmith.Schemas.Traits.Trait)
   end
 
