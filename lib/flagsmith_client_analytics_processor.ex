@@ -11,16 +11,6 @@ defmodule Flagsmith.Client.Analytics.Processor do
   @enforce_keys [:client]
   defstruct [:client, :refresh_cycle, tracking: %{}]
 
-  @doc """
-  Returns the default child specification for the statem
-  """
-  def child_spec(args),
-    do: %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [args]},
-      type: :worker
-    }
-
   #################################
   ########### API
   #################################
@@ -36,14 +26,14 @@ defmodule Flagsmith.Client.Analytics.Processor do
 
   @spec start_link() :: {:ok, pid()} | {:error, term()}
   @spec start_link(opts :: Keyword.t() | nil) :: {:ok, pid()} | {:error, term()}
-  def start_link(opts \\ []),
-    do:
-      :gen_statem.start_link(
-        {:local, __MODULE__},
-        __MODULE__,
-        opts,
-        []
-      )
+  def start_link(opts \\ []) do
+    :gen_statem.start_link(
+      {:local, __MODULE__},
+      __MODULE__,
+      opts,
+      []
+    )
+  end
 
   #################################
   ########### Statem Implementation / Internal 
@@ -63,7 +53,7 @@ defmodule Flagsmith.Client.Analytics.Processor do
 
   @impl :gen_statem
   def handle_event(:internal, :dump, _, %{tracking: tracking, refresh_cycle: refresh_timeout})
-      when map_size(tracking),
+      when map_size(tracking) < 1,
       do: {:keep_state_and_data, [{{:timeout, :dump}, refresh_timeout, nil}]}
 
   def handle_event(

@@ -30,7 +30,7 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get the environment feature states.
+  Get the feature states of an `Environment.t()`.
   """
   @spec get_environment_feature_states(Environment.t()) :: list(Environment.FeatureState.t())
   def get_environment_feature_states(%Environment{
@@ -44,7 +44,7 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get a specific feature state for a given feature_name in a given environment.
+  Get a specific feature state for a given feature_name in a given `Environment.t()`.
   """
   @spec get_environment_feature_state(Environment.t(), name :: String.t()) ::
           Environment.FeatureState.t() | nil
@@ -52,7 +52,7 @@ defmodule Flagsmith.Engine do
     do: Enum.find(fs, fn %{feature: %{name: f_name}} -> f_name == name end)
 
   @doc """
-  Get list of feature states for a given identity in a given environment.
+  Get list of feature states for a given `Identity.t()` in a given `Environment.t()`.
   """
   @spec get_identity_feature_states(
           Environment.t(),
@@ -63,11 +63,12 @@ defmodule Flagsmith.Engine do
         %Environment{
           feature_states: fs,
           project: %Environment.Project{segments: segments}
-        },
+        } = env,
         %Identity{flags: identity_features} = identity,
         override_traits \\ []
       ) do
-    with segment_features <- get_segment_features(segments, identity, override_traits),
+    with identity <- Identity.set_env_key(identity, env),
+         segment_features <- get_segment_features(segments, identity, override_traits),
          replaced <- replace_segment_features(fs, segment_features),
          final_features <- replace_identity_features(replaced, identity_features) do
       final_features
@@ -75,7 +76,8 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get feature state with a given feature_name for a given identity and environment.
+  Get feature state with a given feature_name for a given `Identity.t()` and 
+  `Environment.t()`.
   """
   @spec get_identity_feature_state(
           Environment.t(),
@@ -134,10 +136,7 @@ defmodule Flagsmith.Engine do
     do: false
 
   def evaluate_identity_in_segment(
-        %Identity{
-          identifier: identifier,
-          traits: identity_traits
-        },
+        %Identity{traits: identity_traits} = identity,
         %Segments.Segment{id: segment_id, rules: rules},
         override_traits
       ) do
@@ -148,7 +147,7 @@ defmodule Flagsmith.Engine do
       end
 
     Enum.all?(rules, fn rule ->
-      traits_match_segment_rule(traits, rule, segment_id, identifier)
+      traits_match_segment_rule(traits, rule, segment_id, Identity.composite_key(identity))
     end)
   end
 
@@ -174,13 +173,6 @@ defmodule Flagsmith.Engine do
            traits_match_segment_rule(traits, rule, segment_id, identifier)
          end))
   end
-
-  def traits_match_segment_condition(
-        traits,
-        condition,
-        segment_id,
-        identifier
-      )
 
   def traits_match_segment_condition(
         _traits,
@@ -230,9 +222,12 @@ defmodule Flagsmith.Engine do
          {_, stringed} <- {:join, List.flatten(ids) |> Enum.join(",")},
          {_, hashed} <- {:hash, Flagsmith.Engine.HashingBehaviour.hash(stringed)},
          {_, {int, _}} <- {:int_parse, Integer.parse(hashed, 16)} do
-      case round(Integer.mod(int, 9999) / 9998 * 100) do
-        100 -> percentage_from_ids(original_ids, iterations + 1)
-        percentage -> percentage
+      case Integer.mod(int, 9999) / 9998 * 100 do
+        100.0 ->
+          percentage_from_ids(original_ids, iterations + 1)
+
+        percentage ->
+          percentage
       end
     else
       {_, _} = error -> {:error, error}

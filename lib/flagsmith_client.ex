@@ -1,113 +1,125 @@
 defmodule Flagsmith.Client do
   alias Flagsmith.Schemas
   alias Flagsmith.Configuration
-  alias Flagsmith.Client.Analytics
 
-  @flags_path "/flags/"
-  @identities_path "/identities/"
-  @traits_path "/traits/"
-  @analytics_path "/analytics/flags/"
+  @api_paths Flagsmith.Configuration.api_paths()
+  @environment_header Flagsmith.Configuration.environment_header()
 
   @type tesla_header_list :: [{String.t(), String.t()}]
 
-  def new(opts \\ []) do
-    with environment_key <- Configuration.get_environment_key(opts),
-         api_url <- Configuration.get_api_url(opts) do
-      Tesla.client([
-        base_url_middleware(api_url),
-        auth_middleware(environment_key),
-        Tesla.Middleware.JSON,
-        {Tesla.Middleware.FollowRedirects, max_redirects: 5},
-        {Tesla.Middleware.Timeout, timeout: 5_000}
-      ])
+  @doc """
+  Create a `Tesla.Client.t()` struct to use in requests.
+  Currently accepts as options:
+  - `:environment_key` | required unless configured at the application level
+  - `:api_url`
+  """
+  @spec new(Keyword.t()) :: {:ok, Configuration.t()} | no_return()
+  def new(opts \\ []),
+    do: Configuration.build(opts)
+
+  def http_client(%Configuration{
+        environment_key: environment_key,
+        api_url: api_url,
+        request_timeout_milliseconds: timeout
+      }) do
+    Tesla.client([
+      base_url_middleware(api_url),
+      auth_middleware(environment_key),
+      Tesla.Middleware.JSON,
+      {Tesla.Middleware.FollowRedirects, max_redirects: 5},
+      {Tesla.Middleware.Timeout, timeout: timeout}
+    ])
+  end
+
+  def get_environment(configuration_or_opts \\ [])
+
+  def get_environment(%Configuration{enable_local_evaluation: local?} = config) do
+    case local? do
+      true -> Flagsmith.Client.Poller.get_environment(config)
+      false -> get_environment_request(config)
     end
   end
 
-  def get_flags(),
-    do: get_flags(new(), nil)
+  def get_environment(opts) when is_list(opts),
+    do: get_environment(new(opts))
 
-  def get_flags(feature_name) when is_binary(feature_name),
-    do: get_flags(new(), feature_name)
-
-  def get_flags(%Tesla.Client{} = client, feature_name \\ nil) do
-    params = if(feature_name, do: [query: %{feature: feature_name}], else: [])
-
-    case Tesla.get(client, @flags_path, params) do
+  def get_environment_request(%Configuration{} = config) do
+    case Tesla.get(http_client(config), @api_paths.environment) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        {:ok, Schemas.Features.FeatureState.from_response(body)}
+        {:ok, Schemas.Environment.from_response(body)}
 
       error_resp ->
         return_error(error_resp)
     end
   end
 
-  def get_flags_for_user(identity) when is_binary(identity),
-    do: get_flags_for_user(new(), identity, nil)
+  def get_environment_flags(configuration_or_env_or_opts \\ [])
 
-  def get_flags_for_user(identity, feature_name)
-      when is_binary(identity) and is_binary(feature_name),
-      do: get_flags_for_user(new(), identity, feature_name)
+  def get_environment_flags(%Configuration{enable_local_evaluation: local?} = config) do
+    case local? do
+      true -> Flagsmith.Client.Poller.get_environment_flags(config)
+      false -> get_environment_flags_request(config)
+    end
+  end
 
-  # the feature_name query doesn't work
-  def get_flags_for_user(%Tesla.Client{} = client, identity, feature_name \\ nil)
-      when is_binary(identity) do
-    params = [identifier: identity]
-    params = if(feature_name, do: Keyword.put(params, :feature, feature_name), else: params)
+  def get_environment_flags(%Schemas.Environment{} = env),
+    do: {:ok, extract_flags(env)}
 
-    case Tesla.get(client, @identities_path, query: params) do
+  def get_environment_flags(opts) when is_list(opts),
+    do: get_environment_flags(new(opts))
+
+  defp get_environment_flags_request(%Configuration{} = config) do
+    case get_environment_request(config) do
+      {:ok, %Schemas.Environment{} = env} ->
+        {:ok, extract_flags(env)}
+
+      error ->
+        error
+    end
+  end
+
+  def get_identity_flags(configuration_or_env_or_opts \\ [], identifier, traits)
+
+  def get_identity_flags(
+        %Configuration{enable_local_evaluation: local?} = config,
+        identifier,
+        traits
+      ) do
+    case local? do
+      true -> Flagsmith.Client.Poller.get_identity_flags(config, identifier, traits)
+      false -> get_identity_flags_request(config, identifier, traits)
+    end
+  end
+
+  def get_identity_flags(opts, identifier, traits) when is_list(opts),
+    do: get_identity_flags(new(opts), identifier, traits)
+
+  defp get_identity_flags_request(%Configuration{} = config, identifier, traits) do
+    query = build_identity_params(identifier, traits)
+
+    case Tesla.get(http_client(config), @api_paths.identities, query: query) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        {:ok, Schemas.Identity.from_response(body)}
+        with %Schemas.Identity{flags: flags} <- Schemas.Identity.from_response(body),
+             final_flags <- extract_flags(flags) do
+          {:ok, final_flags}
+        else
+          error ->
+            {:error, error}
+        end
 
       error_resp ->
         return_error(error_resp)
     end
   end
 
-  def get_value(feature_name) when is_binary(feature_name),
-    do: get_value(new(), feature_name, nil)
+  def analytics_track(configuration_or_env_or_opts \\ [], tracking)
 
-  def get_value(feature_name, identity) when is_binary(feature_name) and is_binary(identity),
-    do: get_value(new(), feature_name, identity)
+  def analytics_track(opts, tracking)
+      when is_list(opts) and is_map(tracking) and not is_struct(tracking),
+      do: analytics_track(new(opts), tracking)
 
-  def get_value(%Tesla.Client{} = client, feature_name, identity \\ nil) do
-    case identity do
-      nil -> get_flags(client, feature_name)
-      _ -> get_flags_for_user(client, identity, feature_name)
-    end
-    |> case do
-      {:ok, %Schemas.Features.FeatureState{feature_state_value: val} = flag} ->
-        Analytics.Processor.track(flag)
-        {:ok, val}
-
-      _ ->
-        nil
-    end
-  end
-
-  def get_trait(trait_key, identity) when is_binary(trait_key) and is_binary(identity),
-    do: get_trait(new(), trait_key, identity)
-
-  def get_trait(%Tesla.Client{} = client, trait_key, identity) do
-    with {:ok, %{traits: traits}} <- get_flags_for_user(client, identity) do
-      Schemas.Traits.Trait.extract_trait_value(trait_key, traits)
-    else
-      error -> error
-    end
-  end
-
-  def set_trait(trait_key, trait_value, identity)
-      when is_binary(trait_key) and is_binary(identity),
-      do: set_trait(new(), trait_key, trait_value, identity)
-
-  def set_trait(%Tesla.Client{} = client, trait_key, trait_value, identity)
-      when is_binary(trait_key) and is_binary(identity) do
-    params = %{
-      identity: %{identifier: identity},
-      trait_key: trait_key,
-      trait_value: trait_value
-    }
-
-    case Tesla.post(client, @traits_path, params) do
+  def analytics_track(%Configuration{} = config, tracking) do
+    case Tesla.post(http_client(config), @api_paths.analytics, tracking) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
         {:ok, body}
 
@@ -116,64 +128,27 @@ defmodule Flagsmith.Client do
     end
   end
 
-  def analytics_track(tracking) when is_map(tracking) and not is_struct(tracking),
-    do: analytics_track(new(), tracking)
-
-  def analytics_track(%Tesla.Client{} = client, tracking) do
-    case Tesla.post(client, @analytics_path, tracking) do
-      {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        {:ok, body}
-
-      error_resp ->
-        return_error(error_resp)
-    end
+  defp build_identity_params(identifier, traits) do
+    [
+      identifier: identifier,
+      traits: Schemas.Traits.Trait.from(traits)
+    ]
   end
 
-  def has_feature?(feature_name) when is_binary(feature_name),
-    do: has_feature?(new(), feature_name)
-
-  def has_feature?(%Tesla.Client{} = client, feature_name) when is_binary(feature_name) do
-    with {:ok, %Schemas.Features.FeatureState{} = flag} <- get_flags(client, feature_name),
-         _ <- Analytics.Processor.track(flag) do
-      true
-    else
-      {:error, %{"detail" => _}} -> false
-      error -> error
-    end
+  def extract_flags(%Schemas.Environment{} = env) do
+    env
+    |> Flagsmith.Engine.get_environment_feature_states()
+    |> Enum.reduce(%{}, fn feature_state, acc ->
+      %Schemas.Flag{feature_name: name} = flag = Schemas.Flag.from(feature_state)
+      Map.put(acc, name, flag)
+    end)
   end
 
-  def feature_enabled?(feature_name) when is_binary(feature_name),
-    do: feature_enabled?(new(), feature_name, nil)
-
-  def feature_enabled?(%Tesla.Client{} = client, feature_name) when is_binary(feature_name),
-    do: feature_enabled?(client, feature_name, nil)
-
-  def feature_enabled?(%Tesla.Client{} = client, feature_name, nil)
-      when is_binary(feature_name) do
-    with {:ok, %Schemas.Features.FeatureState{feature: feature} = flag} <-
-           get_flags(client, feature_name),
-         _ <- Analytics.Processor.track(flag) do
-      feature && feature.enabled
-    else
-      {:error, %{"detail" => _}} -> false
-      error -> error
-    end
-  end
-
-  def feature_enabled?(%Tesla.Client{} = client, feature_name, identity)
-      when is_binary(feature_name) and is_binary(identity) do
-    with {:ok, %{flags: flags}} <- get_flags_for_user(client, identity) do
-      case Enum.find(flags, fn %{feature: feature} -> feature.name == feature_name end) do
-        nil ->
-          {:error, :not_found}
-
-        %Schemas.Features.FeatureState{enabled: enabled?} = flag ->
-          Analytics.Processor.track(flag)
-          enabled?
-      end
-    else
-      error -> error
-    end
+  def extract_flags(feature_states) when is_list(feature_states) do
+    Enum.reduce(feature_states, %{}, fn feature_state, acc ->
+      %Schemas.Flag{feature_name: name} = flag = Schemas.Flag.from(feature_state)
+      Map.put(acc, name, flag)
+    end)
   end
 
   @doc false
@@ -189,8 +164,8 @@ defmodule Flagsmith.Client do
     do: {Tesla.Middleware.BaseUrl, base_url}
 
   @spec auth_header(environment_key :: String.t()) :: tesla_header_list()
-  defp auth_header(environment_key), do: [{"X-Environment-Key", environment_key}]
+  defp auth_header(environment_key), do: [{@environment_header, environment_key}]
 
-  defp return_error({:ok, %{body: body} = resp}), do: IO.inspect(resp) && {:error, body}
+  defp return_error({:ok, %{body: body}}), do: {:error, body}
   defp return_error({:error, _} = error), do: error
 end

@@ -1,7 +1,9 @@
 defmodule Flagsmith.EngineTest do
   use ExUnit.Case, async: true
 
+  alias Flagsmith.Schemas
   alias Flagsmith.Schemas.Features
+  alias Flagsmith.Engine.Test
 
   # stub the mock so that it calls the normal module as it would under regular usage
   setup do
@@ -14,17 +16,17 @@ defmodule Flagsmith.EngineTest do
   #### the functionality with a given environment instead of the poller
 
   test "parsing a json string into an environment struct" do
-    assert {:ok, env_map} = Jason.decode(Flagsmith.Engine.Test.Generators.json_env())
+    assert {:ok, env_map} = Jason.decode(Test.Generators.json_env())
 
     assert {:ok,
-            %Flagsmith.Schemas.Environment{
+            %Schemas.Environment{
               amplitude_config: nil,
               api_key: "cU3oztxgvRgZifpLepQJTX",
               feature_states: [
-                %Flagsmith.Schemas.Environment.FeatureState{
+                %Schemas.Environment.FeatureState{
                   django_id: 72267,
                   enabled: false,
-                  feature: %Flagsmith.Schemas.Environment.Feature{
+                  feature: %Schemas.Environment.Feature{
                     id: 13534,
                     name: "header_size",
                     type: "MULTIVARIATE"
@@ -32,22 +34,21 @@ defmodule Flagsmith.EngineTest do
                   feature_state_value: "24px",
                   featurestate_uuid: "79f20ade-c211-48fd-9be7-b759079526ca",
                   multivariate_feature_state_values: [
-                    %Flagsmith.Schemas.Environment.MultivariateFeatureStateValue{
+                    %Schemas.Environment.MultivariateFeatureStateValue{
                       id: 2915,
-                      multivariate_feature_option:
-                        %Flagsmith.Schemas.Environment.MultivariateFeatureOption{
-                          id: 849,
-                          value: "34px"
-                        },
+                      multivariate_feature_option: %Schemas.Environment.MultivariateFeatureOption{
+                        id: 849,
+                        value: "34px"
+                      },
                       mv_fs_value_uuid: "d6ce29da-a737-45ec-a144-c95b1c64922b",
                       percentage_allocation: 80.0
                     }
                   ]
                 },
-                %Flagsmith.Schemas.Environment.FeatureState{
+                %Schemas.Environment.FeatureState{
                   django_id: 72269,
                   enabled: false,
-                  feature: %Flagsmith.Schemas.Environment.Feature{
+                  feature: %Schemas.Environment.Feature{
                     id: 13535,
                     name: "body_size",
                     type: "STANDARD"
@@ -56,10 +57,10 @@ defmodule Flagsmith.EngineTest do
                   featurestate_uuid: "a1073731-f657-4348-8a39-e2bf1b5127a6",
                   multivariate_feature_state_values: []
                 },
-                %Flagsmith.Schemas.Environment.FeatureState{
+                %Schemas.Environment.FeatureState{
                   django_id: 92461,
                   enabled: true,
-                  feature: %Flagsmith.Schemas.Environment.Feature{
+                  feature: %Schemas.Environment.Feature{
                     id: 17985,
                     name: "secret_button",
                     type: "STANDARD"
@@ -68,10 +69,10 @@ defmodule Flagsmith.EngineTest do
                   featurestate_uuid: "07cd43fb-405a-4c7a-8409-208f1739cda2",
                   multivariate_feature_state_values: []
                 },
-                %Flagsmith.Schemas.Environment.FeatureState{
+                %Schemas.Environment.FeatureState{
                   django_id: 94235,
                   enabled: true,
-                  feature: %Flagsmith.Schemas.Environment.Feature{
+                  feature: %Schemas.Environment.Feature{
                     id: 18382,
                     name: "test_identity",
                     type: "STANDARD"
@@ -84,11 +85,11 @@ defmodule Flagsmith.EngineTest do
               heap_config: nil,
               id: 11278,
               mixpanel_config: nil,
-              project: %Flagsmith.Schemas.Environment.Project{
+              project: %Schemas.Environment.Project{
                 hide_disabled_flags: false,
                 id: 4732,
                 name: "testing-api",
-                organisation: %Flagsmith.Schemas.Environment.Organisation{
+                organisation: %Schemas.Environment.Organisation{
                   feature_analytics: false,
                   id: 4131,
                   name: "Mr. Bojangles Inc",
@@ -96,12 +97,12 @@ defmodule Flagsmith.EngineTest do
                   stop_serving_flags: false
                 },
                 segments: [
-                  %Flagsmith.Schemas.Segments.Segment{
+                  %Schemas.Segments.Segment{
                     feature_states: [
-                      %Flagsmith.Schemas.Environment.FeatureState{
+                      %Schemas.Environment.FeatureState{
                         django_id: 95632,
                         enabled: false,
-                        feature: %Flagsmith.Schemas.Environment.Feature{
+                        feature: %Schemas.Environment.Feature{
                           id: 17985,
                           name: "secret_button",
                           type: "STANDARD"
@@ -114,12 +115,12 @@ defmodule Flagsmith.EngineTest do
                     id: 5241,
                     name: "test_segment",
                     rules: [
-                      %Flagsmith.Schemas.Segments.Segment.Rule{
+                      %Schemas.Segments.Segment.Rule{
                         conditions: [],
                         rules: [
-                          %Flagsmith.Schemas.Segments.Segment.Rule{
+                          %Schemas.Segments.Segment.Rule{
                             conditions: [
-                              %Flagsmith.Schemas.Segments.Segment.Condition{
+                              %Schemas.Segments.Segment.Condition{
                                 operator: :EQUAL,
                                 property_: "show_popup",
                                 value: "false"
@@ -133,12 +134,12 @@ defmodule Flagsmith.EngineTest do
                       }
                     ]
                   },
-                  %Flagsmith.Schemas.Segments.Segment{
+                  %Schemas.Segments.Segment{
                     feature_states: [
-                      %Flagsmith.Schemas.Environment.FeatureState{
+                      %Schemas.Environment.FeatureState{
                         django_id: 95631,
                         enabled: false,
-                        feature: %Flagsmith.Schemas.Environment.Feature{
+                        feature: %Schemas.Environment.Feature{
                           id: 17985,
                           name: "secret_button",
                           type: "STANDARD"
@@ -151,12 +152,12 @@ defmodule Flagsmith.EngineTest do
                     id: 5243,
                     name: "test_perc",
                     rules: [
-                      %Flagsmith.Schemas.Segments.Segment.Rule{
+                      %Schemas.Segments.Segment.Rule{
                         conditions: [],
                         rules: [
-                          %Flagsmith.Schemas.Segments.Segment.Rule{
+                          %Schemas.Segments.Segment.Rule{
                             conditions: [
-                              %Flagsmith.Schemas.Segments.Segment.Condition{
+                              %Schemas.Segments.Segment.Condition{
                                 operator: :PERCENTAGE_SPLIT,
                                 property_: nil,
                                 value: "30"
@@ -175,13 +176,13 @@ defmodule Flagsmith.EngineTest do
               segment_config: nil
             } = parsed} = Flagsmith.Engine.parse_environment(env_map)
 
-    assert env_map_2 = Flagsmith.Engine.Test.Generators.json_env()
+    assert env_map_2 = Test.Generators.json_env()
     assert {:ok, ^parsed} = Flagsmith.Engine.parse_environment(env_map_2)
   end
 
   describe "engine with environment" do
     setup do
-      [env: Flagsmith.Engine.Test.Generators.full_env()]
+      [env: Test.Generators.full_env()]
     end
 
     test "get_environment_feature_states/1 when project hide_disabled is false", %{
@@ -224,8 +225,8 @@ defmodule Flagsmith.EngineTest do
   describe "engine identity environment" do
     setup do
       [
-        env: Flagsmith.Engine.Test.Generators.full_env(),
-        identity: Flagsmith.Engine.Test.Generators.identities_list()
+        env: Test.Generators.full_env(),
+        identity: Test.Generators.full_identity()
       ]
     end
 

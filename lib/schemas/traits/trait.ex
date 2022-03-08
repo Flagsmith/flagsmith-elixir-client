@@ -27,4 +27,23 @@ defmodule Flagsmith.Schemas.Traits.Trait do
       _ -> {:error, :not_found}
     end
   end
+
+  def from(traits) when is_list(traits),
+    do: Enum.map(traits, &from/1)
+
+  def from(%__MODULE__{} = trait), do: trait
+
+  def from(%{} = params) do
+    %__MODULE__{}
+    |> cast(params, [:trait_value, :trait_key, :id])
+    |> validate_required([:trait_value])
+    |> apply_changes()
+  end
+
+  def into_update_map(traits) when is_list(traits) do
+    traits
+    |> Enum.reduce(%{}, fn %{trait_key: key, trait_value: value}, acc ->
+      Map.put(acc, key, value)
+    end)
+  end
 end

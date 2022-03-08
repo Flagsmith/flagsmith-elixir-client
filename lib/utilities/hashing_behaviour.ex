@@ -4,5 +4,5 @@ defmodule Flagsmith.Engine.HashingBehaviour do
   def hash(stringed), do: impl().hash(stringed)
 
   defp impl(),
-    do: Application.get_env(Flagsmith.Engine, :hash_module, Flagsmith.Engine.HashingUtils)
+    do: Application.get_env(:flagsmith_engine, :hash_module, Flagsmith.Engine.HashingUtils)
 end
