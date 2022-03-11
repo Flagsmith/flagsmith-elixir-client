@@ -169,10 +169,6 @@ defmodule Flagsmith.Client.Poller do
   # Since we only let the Poller run when it is able to do the initial load we're
   # sure there's always going to be data available even if possibly "stale".
   #
-  # In order to make it simpler and only have to deal with one type of message
-  # we make the spawned process exit with the return value of the
-  # `get_environment_request` - this allows us to then treat the `DOWN` message
-  # as a message containing the result of the call.
   # We also set the `{pid, monitor}` tuple in our state data `:refresh_monitor` in
   # order to be able to match it down the line
 
@@ -203,7 +199,16 @@ defmodule Flagsmith.Client.Poller do
       ),
       do: {:keep_state, %{data | refresh_monitor: nil}, [{:next_event, :internal, :set_refresh}]}
 
-  # 
+  # This is the message sent by the process spawned for doing the refresh request
+  # Although there isn't any reason why we ought to receive a refresh message from
+  # a process other than the one we have stored under the `:refresh_monitor` key
+  # we still make sure it's matching.
+  #
+  # Then we just check if the response is an `:ok` tuple with an `Environment.t` 
+  # we replace the `:environment` key on our statem data and following user queries
+  # will receive the new env or flags. If not we let it stay as is.
+  #
+  # In both situations we set a new refresh timer to do it again.
   def handle_event(
         :info,
         {:refresh, pid, result},
@@ -232,9 +237,6 @@ defmodule Flagsmith.Client.Poller do
   end
 
   # Just a helper to return the initial data struct.
-  # I kept the seconds from the python version, but I think we should use milliseconds
-  # if there's no special reason and no need to keep them the same, since elixir
-  # uses milliseconds for most timer resolutions and options
   defp new_data(%Configuration{environment_refresh_interval_milliseconds: refresh} = config) do
     refresh_milliseconds =
       case refresh do

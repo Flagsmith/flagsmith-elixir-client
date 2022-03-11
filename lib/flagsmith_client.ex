@@ -6,6 +6,7 @@ defmodule Flagsmith.Client do
   @environment_header Flagsmith.Configuration.environment_header()
 
   @type tesla_header_list :: [{String.t(), String.t()}]
+  @type config_or_env :: Configuration.t() | Keyword.t() | Schemas.Environment.t()
 
   @doc """
   Create a `t:Flagsmith.Configuration.t` struct with the desired settings to use
@@ -62,7 +63,10 @@ defmodule Flagsmith.Client do
   def get_environment_request(%Configuration{} = config) do
     case Tesla.get(http_client(config), @api_paths.environment) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        {:ok, Schemas.Environment.from_response(body)}
+        {:ok,
+         body
+         |> Schemas.Environment.from_response()
+         |> Schemas.Environment.add_client_config(config)}
 
       error_resp ->
         return_error(error_resp)
@@ -128,7 +132,7 @@ defmodule Flagsmith.Client do
           list(map() | Traits.Trait.t())
         ) ::
           {:ok, list(Schemas.Flag.t())} | {:error, term()}
-  def get_identity_flags(configuration_or_env_or_opts \\ [], identifier, traits)
+  def get_identity_flags(configuration_or_opts \\ [], identifier, traits)
 
   def get_identity_flags(
         %Configuration{enable_local_evaluation: local?} = config,
@@ -163,11 +167,140 @@ defmodule Flagsmith.Client do
     end
   end
 
-  def analytics_track(configuration_or_env_or_opts \\ [], tracking)
+  @doc """
+  Return all flags from an environment as a list.
+  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
+  `t:Flagsmith.Configuration.t` or list of options, then the flags are extracted
+  from it.
+  """
+  @spec all_flags(config_or_env()) :: list(Schemas.Flag.t())
+  def all_flags(configuration_or_env_or_opts \\ [])
 
-  def analytics_track(opts, tracking)
-      when is_list(opts) and is_map(tracking) and not is_struct(tracking),
-      do: analytics_track(new(opts), tracking)
+  def all_flags(%Schemas.Environment{} = env) do
+    env
+    |> Flagsmith.Engine.get_environment_feature_states()
+    |> Enum.map(&Schemas.Flag.from(&1))
+  end
+
+  def all_flags(%Configuration{} = config) do
+    case get_environment(config) do
+      {:ok, %Schemas.Environment{} = env} -> all_flags(env)
+      error -> error
+    end
+  end
+
+  def all_flags(opts) when is_list(opts),
+    do: all_flags(new(opts))
+
+  @doc """
+  Returns the `:enabled` status of a feature by name, or `:not_found` if the feature
+  doesn't exist.
+
+  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
+  `t:Flagsmith.Configuration.t` or list of options, then the feature is evaluated
+  from that environment, otherwise a local evaluation or api call is executed
+  according to the configuration or passed options.
+  """
+  @spec is_feature_enabled(config_or_env(), feature_name :: String.t()) ::
+          boolean() | :not_found | term()
+  def is_feature_enabled(configuration_or_env_or_opts \\ [], feature_name)
+
+  def is_feature_enabled(%Schemas.Environment{} = env, feature_name) do
+    env
+    |> get_flag(feature_name)
+    |> case do
+      %Schemas.Flag{enabled: enabled?} -> enabled?
+      other -> other
+    end
+  end
+
+  def is_feature_enabled(%Configuration{} = config, feature_name) do
+    case get_environment(config) do
+      {:ok, %Schemas.Environment{} = env} -> is_feature_enabled(env, feature_name)
+      error -> error
+    end
+  end
+
+  def is_feature_enabled(opts, feature_name) when is_list(opts),
+    do: is_feature_enabled(new(opts), feature_name)
+
+  @doc """
+  Returns a `t:Flagsmith.Schemas.Flag.t` by name, or `:not_found` if the feature
+  doesn't exist.
+
+  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
+  `t:Flagsmith.Configuration.t` or list of options, then the feature is looked up
+  in that environment, otherwise a local evaluation or api call is executed
+  according to the configuration or passed options.
+  """
+  @spec get_feature_value(config_or_env(), feature_name :: String.t()) ::
+          :not_found | term()
+  def get_feature_value(configuration_or_env_or_opts \\ [], feature_name)
+
+  def get_feature_value(%Schemas.Environment{} = env, feature_name) do
+    env
+    |> extract_flags()
+    |> case do
+      %{^feature_name => %Schemas.Flag{value: value} = flag} ->
+        maybe_track(flag, env)
+        value
+
+      _ ->
+        :not_found
+    end
+  end
+
+  def get_feature_value(%Configuration{} = config, feature_name) do
+    case get_environment(config) do
+      {:ok, %Schemas.Environment{} = env} -> get_feature_value(env, feature_name)
+      error -> error
+    end
+  end
+
+  def get_feature_value(opts, feature_name) when is_list(opts),
+    do: get_feature_value(new(opts), feature_name)
+
+  @doc """
+  Returns a `t:Flagsmith.Schemas.Flag.t` by name, or `:not_found` if the feature
+  doesn't exist.
+
+  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
+  `t:Flagsmith.Configuration.t` or list of options, then the feature is looked up
+  in that environment, otherwise a local evaluation or api call is executed
+  according to the configuration or passed options.
+  """
+  @spec get_flag(config_or_env(), feature_name :: String.t()) ::
+          Schemas.Flag.t() | :not_found | term()
+  def get_flag(configuration_or_env_or_opts \\ [], feature_name)
+
+  def get_flag(%Schemas.Environment{} = env, feature_name) do
+    env
+    |> extract_flags()
+    |> case do
+      %{^feature_name => %Schemas.Flag{} = flag} ->
+        maybe_track(flag, env)
+
+      _ ->
+        :not_found
+    end
+  end
+
+  def get_flag(%Configuration{} = config, feature_name) do
+    case get_environment(config) do
+      {:ok, %Schemas.Environment{} = env} -> get_flag(env, feature_name)
+      error -> error
+    end
+  end
+
+  def get_flag(opts, feature_name) when is_list(opts),
+    do: get_flag(new(opts), feature_name)
+
+  @doc """
+  Submits a map of `feature_id => number_of_accesses` to the Flagsmith analytics
+  endpoint for usage tracking.
+  """
+  @spec analytics_track(Configuration.t() | Keyword.t(), map()) :: {:ok, map()} | {:error, term}
+  def analytics_track(configuration_or_env_or_opts \\ [], tracking)
 
   def analytics_track(%Configuration{} = config, tracking) do
     case Tesla.post(http_client(config), @api_paths.analytics, tracking) do
@@ -179,16 +312,20 @@ defmodule Flagsmith.Client do
     end
   end
 
-  defp build_identity_params(identifier, [_ | _] = traits) do
-    [
-      identifier: identifier,
-      traits: Schemas.Traits.Trait.from(traits)
-    ]
-  end
+  def analytics_track(opts, tracking)
+      when is_list(opts) and is_map(tracking) and not is_struct(tracking),
+      do: analytics_track(new(opts), tracking)
 
-  defp build_identity_params(identifier, _),
-    do: [identifier: identifier]
-
+  @doc """
+  Given an `t:Flagsmith.Schemas.Environment.t` or a list composed of
+  `t:Flagsmith.Schemas.Environment.FeatureState.t` or
+  `t:Flagsmith.Schemas.Features.FeatureState.t` return a map composed of the features
+  names as keys and the features as `t:Flagsmith.Schemas.Flag.t`.
+  """
+  @spec extract_flags(
+          Schemas.Environment.t()
+          | list(Schemas.Features.FeatureState.t() | Schemas.Environment.FeatureState.t())
+        ) :: %{String.t() => Schemas.Flag.t()}
   def extract_flags(%Schemas.Environment{} = env) do
     env
     |> Flagsmith.Engine.get_environment_feature_states()
@@ -204,6 +341,22 @@ defmodule Flagsmith.Client do
       Map.put(acc, name, flag)
     end)
   end
+
+  defp maybe_track(feature_flag, environment) do
+    Flagsmith.Client.Analytics.Processor.track(feature_flag, environment)
+
+    feature_flag
+  end
+
+  defp build_identity_params(identifier, [_ | _] = traits) do
+    [
+      identifier: identifier,
+      traits: Schemas.Traits.Trait.from(traits)
+    ]
+  end
+
+  defp build_identity_params(identifier, _),
+    do: [identifier: identifier]
 
   @doc false
   @spec auth_middleware(environment_key :: String.t()) ::

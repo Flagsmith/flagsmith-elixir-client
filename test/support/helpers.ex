@@ -17,22 +17,4 @@ defmodule Flagsmith.Test.Helpers do
              end)
     end)
   end
-
-  def ensure_no_pollers(_ctx) do
-    case Process.whereis(Flagsmith.Client.Poller.Supervisor) do
-      nil ->
-        :ok
-
-      _pid ->
-        DynamicSupervisor.which_children(Flagsmith.Client.Poller.Supervisor)
-        |> Enum.reduce_while(:ok, fn {_, pid, _, _}, acc ->
-          Process.exit(pid, :shutdown)
-
-          case Process.alive?(pid) do
-            false -> {:cont, :ok}
-            _ -> {:halt, :is_alive}
-          end
-        end)
-    end
-  end
 end
