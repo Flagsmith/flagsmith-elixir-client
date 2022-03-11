@@ -8,15 +8,19 @@ defmodule Flagsmith.Client do
   @type tesla_header_list :: [{String.t(), String.t()}]
 
   @doc """
-  Create a `Tesla.Client.t()` struct to use in requests.
-  Currently accepts as options:
-  - `:environment_key` | required unless configured at the application level
-  - `:api_url`
+  Create a `t:Flagsmith.Configuration.t` struct with the desired settings to use
+  in requests.
+  All settings are optional with exception of the `:environment_key` if not configured
+  at the application level. 
+  Non specified options will assume defaults, or if set at the application level use
+  that.
   """
   @spec new(Keyword.t()) :: {:ok, Configuration.t()} | no_return()
   def new(opts \\ []),
     do: Configuration.build(opts)
 
+  @doc false
+  @spec http_client(Configuration.t()) :: Tesla.Client.t()
   def http_client(%Configuration{
         environment_key: environment_key,
         api_url: api_url,
@@ -31,6 +35,17 @@ defmodule Flagsmith.Client do
     ])
   end
 
+  @doc """
+  Returns an `:ok` tuple containing a `t:Flagsmith.Schemas.Environment.t` struct,
+  either from the local evaluation or API depending on the configuration used, or an
+  `:error` tuple if unable to. 
+
+  Passing a `t:Flagsmith.Configuration.t` or options with `:enable_local_evaluation`
+  as `true` will start a local process for the given api key used, if one is not 
+  started yet, which requires you to be running the `Flagsmith.Supervisor`.
+  """
+  @spec get_environment(Configuration.t() | Keyword.t()) ::
+          {:ok, Schemas.Environment.t()} | {:error, term()}
   def get_environment(configuration_or_opts \\ [])
 
   def get_environment(%Configuration{enable_local_evaluation: local?} = config) do
@@ -43,6 +58,7 @@ defmodule Flagsmith.Client do
   def get_environment(opts) when is_list(opts),
     do: get_environment(new(opts))
 
+  @doc false
   def get_environment_request(%Configuration{} = config) do
     case Tesla.get(http_client(config), @api_paths.environment) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
@@ -53,6 +69,17 @@ defmodule Flagsmith.Client do
     end
   end
 
+  @doc """
+  Returns an `:ok` tuple containing a list of `t:Flagsmith.Schemas.Flag.t` structs,
+  either from the local evaluation or API depending on the configuration used, or an
+  `:error` tuple if unable to. 
+
+  Passing a `t:Flagsmith.Configuration.t` or options with `:enable_local_evaluation`
+  as `true` will start a local process for the given api key used, if one is not 
+  started yet, which requires you to be running the `Flagsmith.Supervisor`.
+  """
+  @spec get_environment(Configuration.t() | Keyword.t()) ::
+          {:ok, Schemas.Environment.t()} | {:error, term()}
   def get_environment_flags(configuration_or_env_or_opts \\ [])
 
   def get_environment_flags(%Configuration{enable_local_evaluation: local?} = config) do
@@ -68,6 +95,7 @@ defmodule Flagsmith.Client do
   def get_environment_flags(opts) when is_list(opts),
     do: get_environment_flags(new(opts))
 
+  @doc false
   defp get_environment_flags_request(%Configuration{} = config) do
     case get_environment_request(config) do
       {:ok, %Schemas.Environment{} = env} ->
@@ -78,6 +106,28 @@ defmodule Flagsmith.Client do
     end
   end
 
+  @doc """
+  Returns an `:ok` tuple containing a list of `t:Flagsmith.Schemas.Flag.t` structs,
+  either from the local evaluation or API depending on the configuration used, or an
+  `:error` tuple if unable to. The flags are retrieved based on a user identifier
+  so take into account segments and traits. 
+
+  Note: when using local evaluation there's no way to update the
+  traits, the traits passed on to this function are used to check any segment rule
+  specified on the `t:Flagsmith.Schemas.Environment.t` you're accessing. On the other
+  hand, when using the live API evaluation the traits you pass will be used to update
+  the traits associated with the identity you're specifying.
+
+  Passing a `t:Flagsmith.Configuration.t` or options with `:enable_local_evaluation`
+  as `true` will start a local process for the given api key used, if one is not 
+  started yet, which requires you to be running the `Flagsmith.Supervisor`.
+  """
+  @spec get_identity_flags(
+          Configuration.t() | Keyword.t(),
+          String.t(),
+          list(map() | Traits.Trait.t())
+        ) ::
+          {:ok, list(Schemas.Flag.t())} | {:error, term()}
   def get_identity_flags(configuration_or_env_or_opts \\ [], identifier, traits)
 
   def get_identity_flags(
@@ -94,7 +144,8 @@ defmodule Flagsmith.Client do
   def get_identity_flags(opts, identifier, traits) when is_list(opts),
     do: get_identity_flags(new(opts), identifier, traits)
 
-  defp get_identity_flags_request(%Configuration{} = config, identifier, traits) do
+  @doc false
+  def get_identity_flags_request(%Configuration{} = config, identifier, traits) do
     query = build_identity_params(identifier, traits)
 
     case Tesla.get(http_client(config), @api_paths.identities, query: query) do
@@ -128,12 +179,15 @@ defmodule Flagsmith.Client do
     end
   end
 
-  defp build_identity_params(identifier, traits) do
+  defp build_identity_params(identifier, [_ | _] = traits) do
     [
       identifier: identifier,
       traits: Schemas.Traits.Trait.from(traits)
     ]
   end
+
+  defp build_identity_params(identifier, _),
+    do: [identifier: identifier]
 
   def extract_flags(%Schemas.Environment{} = env) do
     env

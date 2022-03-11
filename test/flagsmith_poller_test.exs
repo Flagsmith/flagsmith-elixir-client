@@ -111,7 +111,7 @@ defmodule Flagsmith.Client.Poller.Test do
     end
 
     test "the refresh works accordingly" do
-      # the configuration with a float as the interval, so it will be 1millisecond
+      # the configuration with a 1millisecond refresh interval
       config =
         Flagsmith.Client.new(
           enable_local_evaluation: true,
@@ -137,10 +137,9 @@ defmodule Flagsmith.Client.Poller.Test do
         {:ok, %Tesla.Env{status: 200, body: env_response}}
       end)
 
-      # this is the second expectation that should happen due to the refresh
-      # because we have set the refresh interval to 0.1 (which is a float) it will be
-      # converted to 0.1 * 10 milliseconds, which means 1 millisecond, due to that
-      # we should have another call to the env endpoint almost immediately.
+      # this is the second expectation that should happen due to the refresh after 1
+      # millisecond, due to that we should have another call to the env endpoint
+      # almost immediately.
       # in this mock resolution we update the timer refresh rate in the poller to make
       # sure it's not called anymore and we answer with a different env, in order
       # to make sure the flags are different than originally set.
@@ -207,7 +206,7 @@ defmodule Flagsmith.Client.Poller.Test do
       #
       # all other trace messages (because there's plenty of them going on all the
       # the time from linking, exiting, tesla adaptor async stuff, etc
-      # we just ignore and continue looping
+      # we just ignore and continue looping)
       #
       # if after 200 milliseconds on a reduction there's no message coming in we
       # bail the reduce with false which will make the assertion fail

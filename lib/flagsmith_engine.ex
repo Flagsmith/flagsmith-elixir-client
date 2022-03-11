@@ -3,7 +3,8 @@ defmodule Flagsmith.Engine do
     Environment,
     Traits,
     Segments,
-    Identity
+    Identity,
+    Features
   }
 
   alias Traits.Trait
@@ -96,12 +97,30 @@ defmodule Flagsmith.Engine do
     |> Enum.find(fn %{feature: %{name: f_name}} -> f_name == name end)
   end
 
+  @doc """
+  Filters a list of segments accordingly to if they match an identity and traits
+  (optionally using a list of traits to override those in the identity)
+  """
+  @spec get_segment_features(
+          segments :: list(Segments.Segment.t()),
+          Identity.t(),
+          override_traits :: list(Traits.Trait.t())
+        ) :: list(Segments.Segment.t())
   def get_segment_features(segments, identity, override_traits) do
     Enum.filter(segments, fn segment ->
       evaluate_identity_in_segment(identity, segment, override_traits)
     end)
   end
 
+  @doc """
+  Returns a list of `Environment.FeatureState.t()` where any that has the same name
+  as in the segments provided is replaced by the feature state there specified (if
+  any).
+  """
+  @spec replace_segment_features(
+          original :: list(Environment.FeatureState.t()),
+          to_replace :: list(Segments.Segment.t())
+        ) :: list(Environment.FeatureState.t())
   def replace_segment_features(original, to_replace) do
     Enum.reduce(to_replace, original, fn %{name: replacement_name, feature_states: segment_fs},
                                          acc ->
@@ -120,6 +139,15 @@ defmodule Flagsmith.Engine do
     end)
   end
 
+  @doc """
+  Returns a list with elements of any of `Environment.FeatureState.t()` or 
+  `Features.FeatureState.t()` where any that has the same name as in any of the
+  identity `Features.FeatureState.t()` provided is replaced by that feature.
+  """
+  @spec replace_segment_features(
+          original :: list(Environment.FeatureState.t()),
+          to_replace :: list(Features.FeatureState.t())
+        ) :: list(Environment.FeatureState.t() | Features.FeatureState.t())
   def replace_identity_features(original, to_replace) do
     Enum.reduce(to_replace, original, fn %{feature: %{name: replacement_name}} = replacement_flag,
                                          acc ->
@@ -132,6 +160,14 @@ defmodule Flagsmith.Engine do
     end)
   end
 
+  @doc """
+  True if an identity is deemed matching a segment conditions & rules, false otherwise.
+  """
+  @spec evaluate_identity_in_segment(Identity.t(), Segments.Segment.t(), list(Traits.Trait.t())) ::
+          boolean()
+
+  # if there's no rules we say it doesn't match but I'm not sure this is how it
+  # should be
   def evaluate_identity_in_segment(_, %Segments.Segment{rules: []}, _),
     do: false
 
@@ -151,6 +187,17 @@ defmodule Flagsmith.Engine do
     end)
   end
 
+  @doc """
+  True if the segment rule conditions all match (or there's no conditions) and all
+  nested rules too (or there's no rules), false otherwise.
+
+  """
+  @spec traits_match_segment_rule(
+          list(Traits.Trait.t()),
+          Segments.Segment.Rule.t(),
+          non_neg_integer(),
+          String.t()
+        ) :: boolean()
   def traits_match_segment_rule(
         traits,
         %Segments.Segment.Rule{type: type, rules: rules, conditions: conditions},
@@ -174,6 +221,17 @@ defmodule Flagsmith.Engine do
          end))
   end
 
+  @doc """
+  True if according to the type of condition operator the co mparison is true, false
+  otherwise. With exception for PERCENTAGE_SPLIT operator all others are matched against
+  the traits passed in.
+  """
+  @spec traits_match_segment_condition(
+          list(Traits.Trait.t()),
+          Segments.Segment.Condition.t(),
+          non_neg_integer(),
+          String.t()
+        ) :: boolean()
   def traits_match_segment_condition(
         _traits,
         %Segments.Segment.Condition{operator: :PERCENTAGE_SPLIT, value: value},
@@ -216,6 +274,12 @@ defmodule Flagsmith.Engine do
     end)
   end
 
+  @doc """
+  Given a list of ids in either and optionally a number of to duplicate them n times,
+  compute a value representing a percentage to which those ids when hashed match.
+  Refer to https://github.com/Flagsmith/flagsmith-engine/blob/c34b4baeea06d31d221433053b64c1e855fd8d4d/flag_engine/utils/hashing.py#L5
+  """
+  @spec percentage_from_ids(list(String.t() | non_neg_integer()), non_neg_integer()) :: float()
   def percentage_from_ids(original_ids, iterations \\ 1) do
     with {_, as_strings} <- {:strings, Enum.map(original_ids, &id_to_string/1)},
          {_, ids} <- {:ids, List.duplicate(as_strings, iterations)},
@@ -234,11 +298,15 @@ defmodule Flagsmith.Engine do
     end
   end
 
-  def id_to_string(ids) when is_list(ids), do: Enum.map(ids, &id_to_string/1)
-  def id_to_string(int) when is_integer(int), do: Integer.to_string(int)
-  def id_to_string(bin) when is_binary(bin), do: bin
-  def id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
+  defp id_to_string(ids) when is_list(ids), do: Enum.map(ids, &id_to_string/1)
+  defp id_to_string(int) when is_integer(int), do: Integer.to_string(int)
+  defp id_to_string(bin) when is_binary(bin), do: bin
+  defp id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
 
+  @doc """
+  Given an `Types.Operator.t()`, a cast or uncast segment value, and a cast trait 
+  value, evaluate if the trait value matches to the segment value.
+  """
   @spec trait_match(
           condition :: Types.Operator.t(),
           segment_value :: String.t() | Trait.Value.t(),
