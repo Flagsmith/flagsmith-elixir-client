@@ -48,14 +48,19 @@ defmodule Flagsmith.Configuration do
           enable_analytics: boolean()
         }
 
+  @doc false
   def default_url(), do: @default_url
+
+  @doc false
   def environment_header(), do: @environment_header
+
   @doc false
   @spec api_paths() :: map()
   @spec api_paths(what :: atom()) :: String.t() | no_return
   def api_paths(), do: @api_paths
   def api_paths(what), do: Map.fetch!(@api_paths, what)
 
+  @doc false
   def build(opts \\ []) do
     with key <- get_environment_key(opts),
          config <- %__MODULE__{environment_key: key} do
@@ -65,14 +70,14 @@ defmodule Flagsmith.Configuration do
     end
   end
 
-  def get_environment_key(opts \\ []) do
+  defp get_environment_key(opts) do
     case Keyword.get(opts, :environment_key) do
       nil -> get!(:environment_key)
       key -> key
     end
   end
 
-  def maybe_add_key(config_acc, key, opts) do
+  defp maybe_add_key(config_acc, key, opts) do
     case Keyword.get(opts, key) do
       nil ->
         case get(key) do

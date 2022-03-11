@@ -5,6 +5,7 @@ defmodule Flagsmith.Client.Test do
   import Flagsmith.Test.Helpers, only: [assert_request: 2]
 
   alias Flagsmith.Engine.Test
+  alias Flagsmith.Schemas
 
   @environment_header Flagsmith.Configuration.environment_header()
   @api_url Flagsmith.Configuration.default_url()
@@ -21,15 +22,22 @@ defmodule Flagsmith.Client.Test do
   # setup Mox to verify any expectations 
   setup :verify_on_exit!
 
-  describe "API calls" do
-    test "get_environment_flags" do
+  setup do
+    [config: Flagsmith.Client.new(environment_key: "client_test_key")]
+  end
+
+  describe "config tests" do
+  end
+
+  describe "API calls except identity ones" do
+    setup %{config: config} do
       # set expectation for the http call 
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         assert_request(
           tesla_env,
           body: nil,
           query: [],
-          headers: [{@environment_header, "another_key"}],
+          headers: [{@environment_header, config.environment_key}],
           url: Path.join([@api_url, @api_paths.environment]) <> "/",
           method: :get
         )
@@ -37,46 +45,148 @@ defmodule Flagsmith.Client.Test do
         {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
       end)
 
+      :ok
+    end
+
+    test "get_environment_flags", %{config: config} do
       assert {:ok,
               %{
-                "body_size" => %Flagsmith.Schemas.Flag{
+                "body_size" => %Schemas.Flag{
                   enabled: false,
                   feature_id: 13535,
                   feature_name: "body_size",
                   value: "18px"
                 },
-                "header_size" => %Flagsmith.Schemas.Flag{
+                "header_size" => %Schemas.Flag{
                   enabled: false,
                   feature_id: 13534,
                   feature_name: "header_size",
                   value: "24px"
                 },
-                "secret_button" => %Flagsmith.Schemas.Flag{
+                "secret_button" => %Schemas.Flag{
                   enabled: true,
                   feature_id: 17985,
                   feature_name: "secret_button",
                   value: "{\"colour\": \"#ababab\"}"
                 },
-                "test_identity" => %Flagsmith.Schemas.Flag{
+                "test_identity" => %Schemas.Flag{
                   enabled: true,
                   feature_id: 18382,
                   feature_name: "test_identity",
                   value: "very_yes"
                 }
-              }} = Flagsmith.Client.get_environment_flags(environment_key: "another_key")
+              }} = Flagsmith.Client.get_environment_flags(config)
 
       # we also assert that no poller was initiated by making sure there's no pid
-      assert :undefined = Flagsmith.Client.Poller.whereis("another_key")
+      assert :undefined = Flagsmith.Client.Poller.whereis(config.environment_key)
     end
 
-    test "get_identity_flags" do
+    test "all_flags", %{config: config} do
+      assert {:ok, %Schemas.Environment{} = env} = Flagsmith.Client.get_environment(config)
+      assert [_1, _2, _3, _4] = all_flags = Flagsmith.Client.all_flags(env)
+
+      #  call with config will make a new http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+      end)
+
+      assert ^all_flags = Flagsmith.Client.all_flags(config)
+    end
+
+    test "is_feature_enabled", %{config: config} do
+      assert {:ok, %Schemas.Environment{} = env} = Flagsmith.Client.get_environment(config)
+
+      assert Flagsmith.Client.is_feature_enabled(env, "secret_button")
+      refute Flagsmith.Client.is_feature_enabled(env, "body_size")
+
+      #  call with config will make a new http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+      end)
+
+      assert Flagsmith.Client.is_feature_enabled(config, "secret_button")
+    end
+
+    test "get_flag", %{config: config} do
+      assert {:ok, %Schemas.Environment{} = env} = Flagsmith.Client.get_environment(config)
+
+      assert %Schemas.Flag{
+               enabled: true,
+               feature_id: 17985,
+               feature_name: "secret_button",
+               value: "{\"colour\": \"#ababab\"}"
+             } = flag = Flagsmith.Client.get_flag(env, "secret_button")
+
+      #  call with config will make a new http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+      end)
+
+      # assert it's exactly the same flag as when using the env
+      assert ^flag = Flagsmith.Client.get_flag(config, "secret_button")
+    end
+
+    test "get_feature_value", %{config: config} do
+      assert {:ok, %Schemas.Environment{} = env} = Flagsmith.Client.get_environment(config)
+
+      assert "{\"colour\": \"#ababab\"}" =
+               value = Flagsmith.Client.get_feature_value(env, "secret_button")
+
+      #  call with config will make a new http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+      end)
+
+      # assert it's exactly the same value as when using the env
+      assert ^value = Flagsmith.Client.get_feature_value(config, "secret_button")
+    end
+  end
+
+  describe "api calls for identity related" do
+    test "get_identity_flags", %{config: config} do
       # set expectation for the http call 
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         assert_request(
           tesla_env,
           body: nil,
           query: [],
-          headers: [{@environment_header, "another_key"}],
+          headers: [{@environment_header, config.environment_key}],
           url: Path.join([@api_url, @api_paths.identities]) <> "/",
           method: :get
         )
@@ -86,13 +196,36 @@ defmodule Flagsmith.Client.Test do
 
       assert {
                :ok,
-               %{}
-             } =
-               Flagsmith.Client.get_identity_flags(
-                 [environment_key: "another_key"],
-                 "test-identity",
-                 []
-               )
+               %{
+                 "body_size" => %Schemas.Flag{
+                   enabled: false,
+                   feature_id: 13535,
+                   feature_name: "body_size",
+                   value: "18px"
+                 },
+                 "header_size" => %Schemas.Flag{
+                   enabled: false,
+                   feature_id: 13534,
+                   feature_name: "header_size",
+                   value: "34px"
+                 },
+                 "secret_button" => %Schemas.Flag{
+                   enabled: true,
+                   feature_id: 17985,
+                   feature_name: "secret_button",
+                   value: nil
+                 },
+                 "test_identity" => %Schemas.Flag{
+                   enabled: true,
+                   feature_id: 18382,
+                   feature_name: "test_identity",
+                   value: "very_no"
+                 }
+               }
+             } = Flagsmith.Client.get_identity_flags(config, "super1234324", [])
+
+      # we also assert that no poller was initiated by making sure there's no pid
+      assert :undefined = Flagsmith.Client.Poller.whereis(config.environment_key)
     end
   end
 end

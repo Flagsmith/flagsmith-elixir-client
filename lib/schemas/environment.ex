@@ -16,6 +16,8 @@ defmodule Flagsmith.Schemas.Environment do
     embeds_one(:segment_config, __MODULE__.Integration)
     embeds_one(:mixpanel_config, __MODULE__.Integration)
     embeds_one(:heap_config, __MODULE__.Integration)
+
+    field(:__configuration__, :map)
   end
 
   @spec changeset(map()) :: Ecto.Changeset.t()
@@ -54,4 +56,7 @@ defmodule Flagsmith.Schemas.Environment do
   end
 
   def from_response(element), do: element
+
+  def add_client_config(%__MODULE__{} = struct, %Flagsmith.Configuration{} = config),
+    do: %{struct | __configuration__: config}
 end

@@ -138,7 +138,7 @@ defmodule Flagsmith.Client.Poller.Test do
       end)
 
       # this is the second expectation that should happen due to the refresh after 1
-      # millisecond, due to that we should have another call to the env endpoint
+      # millisecond, because of that we should have another call to the env endpoint
       # almost immediately.
       # in this mock resolution we update the timer refresh rate in the poller to make
       # sure it's not called anymore and we answer with a different env, in order
@@ -294,20 +294,21 @@ defmodule Flagsmith.Client.Poller.Test do
         {:ok, %Tesla.Env{status: 200, body: env_response}}
       end)
 
-      # we stub the hashing module as well as that will be called for the identities
+      # We stub the hashing module as well as that will be called for the identities
       # related retrievals
       stub_with(Flagsmith.Engine.MockHashing, Flagsmith.Engine.HashingUtils)
 
       {:ok, pid} = Flagsmith.Client.Poller.start_link(config)
       allow(Tesla.Adapter.Mock, self(), pid)
 
-      # and because it will be done by the poller process we need to allow it to use
+      # And because it will be done by the poller process we need to allow it to use
       # the stub as well
       allow(Flagsmith.Engine.MockHashing, self(), pid)
 
-      # we return the pid to be available on the tests as a convenience we could do
-      # start_link inside each test but this is equivalent since it runs on each test
-      # we can then once again just make sure that the poller process never crashed
+      # We return the pid to be available on the tests as a convenience we could do
+      # start_link inside each test but this is equivalent since it runs on each test.
+      #
+      # We can then once again just make sure that the poller process never crashed
       # by asserting it's still the same pid after the test calls
       [poller_pid: pid, config: config]
     end
