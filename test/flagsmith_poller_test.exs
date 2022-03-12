@@ -111,12 +111,15 @@ defmodule Flagsmith.Client.Poller.Test do
     end
 
     test "the refresh works accordingly" do
-      # the configuration with a 1millisecond refresh interval
+      # the configuration with a 3millisecond refresh interval
+      # one seemed to be too low as very intermittently the test would fail in the
+      # first `get_environment` or `get_environment_flags` because they poller would
+      # have refreshed already, and no longer where there 4 flags
       config =
         Flagsmith.Client.new(
           enable_local_evaluation: true,
           environment_key: "test_key",
-          environment_refresh_interval_milliseconds: 1
+          environment_refresh_interval_milliseconds: 3
         )
 
       # the original env response
@@ -137,7 +140,7 @@ defmodule Flagsmith.Client.Poller.Test do
         {:ok, %Tesla.Env{status: 200, body: env_response}}
       end)
 
-      # this is the second expectation that should happen due to the refresh after 1
+      # this is the second expectation that should happen due to the refresh after 3
       # millisecond, because of that we should have another call to the env endpoint
       # almost immediately.
       # in this mock resolution we update the timer refresh rate in the poller to make
@@ -229,7 +232,7 @@ defmodule Flagsmith.Client.Poller.Test do
                end
              end)
 
-      # the timeout for refresh is 1millisecond so waiting 5 should be more than
+      # the timeout for refresh is 3millisecond so waiting 5 should be more than
       # enough for the process to reflect its new env
       Process.sleep(5)
       # then we call the client for env flags with the same config
