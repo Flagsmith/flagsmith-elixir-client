@@ -25,12 +25,16 @@ defmodule Flagsmith.Client do
   def http_client(%Configuration{
         environment_key: environment_key,
         api_url: api_url,
-        request_timeout_milliseconds: timeout
+        request_timeout_milliseconds: timeout,
+        custom_headers: custom_headers,
+        retries: retries
       }) do
     Tesla.client([
       base_url_middleware(api_url),
       auth_middleware(environment_key),
       Tesla.Middleware.JSON,
+      {Tesla.Middleware.Retry, max_retries: retries},
+      {Tesla.Middleware.Headers, custom_headers},
       {Tesla.Middleware.FollowRedirects, max_redirects: 5},
       {Tesla.Middleware.Timeout, timeout: timeout}
     ])
@@ -82,8 +86,8 @@ defmodule Flagsmith.Client do
   as `true` will start a local process for the given api key used, if one is not 
   started yet, which requires you to be running the `Flagsmith.Supervisor`.
   """
-  @spec get_environment(Configuration.t() | Keyword.t()) ::
-          {:ok, Schemas.Environment.t()} | {:error, term()}
+  @spec get_environment_flags(config_or_env()) ::
+          {:ok, list(Schemas.Flag.t())} | {:error, term()}
   def get_environment_flags(configuration_or_env_or_opts \\ [])
 
   def get_environment_flags(%Configuration{enable_local_evaluation: local?} = config) do
