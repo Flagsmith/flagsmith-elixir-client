@@ -10,7 +10,7 @@ defmodule Flagsmith.Client.Analytics.Processor do
   @type environment_key :: String.t()
   @type identity_id :: String.t() | non_neg_integer()
   @type feature_type ::
-          Schemas.Features.FeatureState.t() | Schemas.Features.Feature.t() | Schemas.Flag
+          Schemas.Features.FeatureState.t() | Schemas.Features.Feature.t() | Schemas.Flag.t()
   @type env_or_config :: Schemas.Environment.t() | Configuration.t()
 
   @default_dump_cycle_in_milliseconds 60_000

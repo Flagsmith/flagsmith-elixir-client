@@ -15,13 +15,13 @@ defmodule Flagsmith.Client.Analytics.Processor.Supervisor do
     DynamicSupervisor.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
-  @spec start_child(opts :: Keyword.t()) :: {:ok, pid()} | {:error, any()}
-  def start_child(opts) do
+  @spec start_child(Flagsmith.Configuration.t()) :: {:ok, pid()} | {:error, any()}
+  def start_child(%Flagsmith.Configuration{} = config) do
     DynamicSupervisor.start_child(
       __MODULE__,
       %{
         id: Flagsmith.Client.Analytics.Processor,
-        start: {Flagsmith.Client.Analytics.Processor, :start_link, [opts]},
+        start: {Flagsmith.Client.Analytics.Processor, :start_link, [config]},
         shutdown: 25_000,
         restart: :temporary,
         type: :worker
