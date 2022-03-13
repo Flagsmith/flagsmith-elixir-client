@@ -8,7 +8,22 @@ defmodule FlagsmithEngine.MixProject do
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      source_url: "https://github.com/Flagsmith/flagsmith-elixir-flag-engine",
+      homepage_url: "https://hexdocs.pm/flagsmith_engine/readme.html",
+      docs: [
+        main: "Flagsmith.Client",
+        extras: ["README.md"]
+      ],
+      description:
+        "Elixir Engine and Client for Flagsmith. Ship features with confidence using feature flags.",
+      package: [
+        exclude_patterns: [~r/.*~$/, ~r/#.*#$/],
+        licenses: ["MIT"],
+        links: %{
+          "github/readme" => "https://github.com/Flagsmith/flagsmith-elixir-flag-engine"
+        }
+      ]
     ]
   end
 
@@ -33,7 +48,7 @@ defmodule FlagsmithEngine.MixProject do
       {:typed_enum, "~> 0.1"},
       {:plug_cowboy, "~> 2.0", only: :test, runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.0", only: :dev, runtime: false},
       {:mox, "~> 1.0", only: :test}
     ]
   end

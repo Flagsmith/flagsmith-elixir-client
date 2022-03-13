@@ -1,8 +1,6 @@
 defmodule Flagsmith.Schemas.Flag do
   use TypedEctoSchema
-  import Ecto.Changeset
 
-  alias Flagsmith.Schemas
   alias Flagsmith.Schemas.{Environment, Features}
 
   @moduledoc """
