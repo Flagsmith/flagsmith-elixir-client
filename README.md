@@ -43,24 +43,24 @@ Any field `t:Flagsmith.Configuration.t/0` has can be set at the app level config
 When set at the app level you don't need to generate clients when using `Flagsmith.Client` module functions, unless you want or need different options.
 
 ## Options
-```
-environment_key -> a server side sdk key (required)
 
-api_url -> the base url to which requests against the Flagsmith API will be made (defaults to: "https://api.flagsmith.com/api/v1>")
+- `environment_key` -> a server side sdk key (required)
 
-default_flag_handler -> a 1 arity function that receives a feature name (String.t()) and is called when calling feature related functions and the given feature isn't found -> defaults to returning `:not_found`
+- `api_url` -> the base url to which requests against the Flagsmith API will be made (defaults to: "https://api.flagsmith.com/api/v1>")
 
-custom_headers -> additional headers to include in the calls to the Flagsmith API, defaults to an empty list (no additional headers)
+- `default_flag_handler` -> a 1 arity function that receives a feature name (String.t()) and is called when calling feature related functions and the given feature isn't found -> defaults to returning `:not_found`
 
-request_timeout_milliseconds -> the timeout for the HTTP adapter when doing calls to the Flagsmith API (defaults to 5_000 milliseconds)
+- `custom_headers` -> additional headers to include in the calls to the Flagsmith API, defaults to an empty list (no additional headers)
 
-enable_local_evaluation -> starts a poller cache for each sdk key in use, on their first invocation and keeps a local auto-refreshing cache with the environment document for each. This allows you to keep Flagsmith API calls to a minimum as the environment can be fetched locally and used for any other related functionality in the client.
+- `request_timeout_milliseconds` -> the timeout for the HTTP adapter when doing calls to the Flagsmith API (defaults to 5_000 milliseconds)
 
-environment_refresh_interval_milliseconds -> the time to wait between polling the Flagsmith API for a new environment document, only relevant if `enable_local_evaluation` is set to true.
+- `enable_local_evaluation` -> starts a poller cache for each sdk key in use, on their first invocation and keeps a local auto-refreshing cache with the environment document for each. This allows you to keep Flagsmith API calls to a minimum as the environment can be fetched locally and used for any other related functionality in the client.
 
-retries -> the number of times the http adapter is allowed to retry failed calls to the Flagsmith API before deeming the response failed. Keep in mind that with local_evaluation and analytics, even if the requests fail after whatever number of retries you set here, they will keep being retried as their time-cycle resets (for the poller whatever is the environment_refresh_interval_milliseconds, for the analytics they're batched, and a dump is tried every 1 minute)
+- `environment_refresh_interval_milliseconds` -> the time to wait between polling the Flagsmith API for a new environment document, only relevant if `enable_local_evaluation` is set to true.
 
-enable_analytics -> track feature queries by reporting automatically to the Flagsmith API analytics endpoint queries and lookups to features. This only works when using the `Flagsmith.Client` module functions such as `is_feature_enabled`, `get_feature_value` and `get_flag`. 
+- `retries` -> the number of times the http adapter is allowed to retry failed calls to the Flagsmith API before deeming the response failed. Keep in mind that with local_evaluation and analytics, even if the requests fail after whatever number of retries you set here, they will keep being retried as their time-cycle resets (for the poller whatever is the environment_refresh_interval_milliseconds, for the analytics they're batched, and a dump is tried every 1 minute)
+
+- `enable_analytics` -> track feature queries by reporting automatically to the Flagsmith API analytics endpoint queries and lookups to features. This only works when using the `Flagsmith.Client` module functions such as `is_feature_enabled`, `get_feature_value` and `get_flag`. 
 
 
 To use the client library without application level configuration (or to override it) whenever a configuration is expected you can pass either a `t:Flagsmith.Configuration.t/0` struct or a keyword list with the options as elements. For instance:
