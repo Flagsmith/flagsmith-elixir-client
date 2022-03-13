@@ -16,7 +16,7 @@ defmodule Flagsmith.Client do
   Non specified options will assume defaults, or if set at the application level use
   that.
   """
-  @spec new(Keyword.t()) :: {:ok, Configuration.t()} | no_return()
+  @spec new(Keyword.t()) :: Configuration.t() | no_return()
   def new(opts \\ []),
     do: Configuration.build(opts)
 
@@ -133,7 +133,7 @@ defmodule Flagsmith.Client do
   @spec get_identity_flags(
           Configuration.t() | Keyword.t(),
           String.t(),
-          list(map() | Traits.Trait.t())
+          list(map() | Schemas.Traits.Trait.t())
         ) ::
           {:ok, list(Schemas.Flag.t())} | {:error, term()}
   def get_identity_flags(configuration_or_opts \\ [], identifier, traits)
@@ -243,10 +243,9 @@ defmodule Flagsmith.Client do
 
   def get_feature_value(%Schemas.Environment{} = env, feature_name) do
     env
-    |> extract_flags()
+    |> get_flag(feature_name)
     |> case do
-      %{^feature_name => %Schemas.Flag{value: value} = flag} ->
-        maybe_track(flag, env)
+      %Schemas.Flag{value: value} ->
         value
 
       _ ->

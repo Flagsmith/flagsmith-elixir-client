@@ -127,7 +127,7 @@ defmodule Flagsmith.Engine do
       Enum.map(acc, fn %{feature: %{name: feature_name}} = flag ->
         case replacement_name == feature_name do
           true ->
-            case Enum.reduce(segment_fs, nil, fn segment -> segment end) do
+            case Enum.reduce(segment_fs, nil, fn segment, _ -> segment end) do
               nil -> flag
               replacement -> replacement
             end
@@ -144,7 +144,7 @@ defmodule Flagsmith.Engine do
   `Features.FeatureState.t()` where any that has the same name as in any of the
   identity `Features.FeatureState.t()` provided is replaced by that feature.
   """
-  @spec replace_segment_features(
+  @spec replace_identity_features(
           original :: list(Environment.FeatureState.t()),
           to_replace :: list(Features.FeatureState.t())
         ) :: list(Environment.FeatureState.t() | Features.FeatureState.t())
