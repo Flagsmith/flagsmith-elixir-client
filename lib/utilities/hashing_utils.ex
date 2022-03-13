@@ -1,4 +1,5 @@
 defmodule Flagsmith.Engine.HashingUtils do
+  @moduledoc false
   @behaviour Flagsmith.Engine.HashingBehaviour
 
   def hash(stringed),

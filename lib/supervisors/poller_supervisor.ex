@@ -3,6 +3,8 @@ defmodule Flagsmith.Client.Poller.Supervisor do
 
   require Logger
 
+  @moduledoc false
+
   def child_spec(_),
     do: %{
       id: __MODULE__,

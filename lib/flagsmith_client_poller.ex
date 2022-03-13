@@ -1,4 +1,5 @@
 defmodule Flagsmith.Client.Poller do
+  @moduledoc false
   require Logger
 
   alias Flagsmith.Configuration

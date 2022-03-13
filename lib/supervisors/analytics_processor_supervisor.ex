@@ -1,6 +1,8 @@
 defmodule Flagsmith.Client.Analytics.Processor.Supervisor do
   use DynamicSupervisor
 
+  @moduledoc false
+
   require Logger
 
   def child_spec(_),

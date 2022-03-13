@@ -1,4 +1,5 @@
 defmodule Flagsmith.Engine.HashingBehaviour do
+  @moduledoc false
   @callback hash(String.t()) :: binary()
 
   def hash(stringed), do: impl().hash(stringed)

@@ -1,5 +1,6 @@
 defmodule Flagsmith.Client.Analytics.Processor do
   require Logger
+  @moduledoc false
 
   alias Flagsmith.Configuration
   alias Flagsmith.Schemas

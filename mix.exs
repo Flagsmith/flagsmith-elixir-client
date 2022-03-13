@@ -4,7 +4,7 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "0.1.1",
+      version: "0.1.5",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -13,7 +13,14 @@ defmodule FlagsmithEngine.MixProject do
       homepage_url: "https://hexdocs.pm/flagsmith_engine/readme.html",
       docs: [
         main: "Flagsmith.Client",
-        extras: ["README.md"]
+        extras: ["README.md"],
+        nest_modules_by_prefix: [
+          Flagsmith.Schemas.Environment,
+          Flagsmith.Schemas.Features,
+          Flagsmith.Schemas.Segments,
+          Flagsmith.Schemas.Traits,
+          Flagsmith.Schemas.Types
+        ]
       ],
       description:
         "Elixir Engine and Client for Flagsmith. Ship features with confidence using feature flags.",

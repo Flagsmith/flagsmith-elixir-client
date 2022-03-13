@@ -2,6 +2,19 @@ defmodule Flagsmith.Supervisor do
   use Supervisor
   require Logger
 
+  @moduledoc """
+  Implements the necessary supervision tree to ensure Poller and Analytics processors
+  can be started, accessed and supervised correctly.
+
+  This supervisor starts 3 additional processes, a local `Registry` and two dynamic
+  supervisors responsible for starting Pollers and Analytics processes (usually
+  a single one, but since they are isolated by sdk key used, if you use multiple
+  sdks to access different environments in Flagsmith, in the same application you'll
+  end up with that same amount of processes, number of environments times 2).
+  The pollers and analytics are only started once there are interactions with either,
+  and they stay until application shutdown.
+  """
+
   def child_spec(_),
     do: %{
       id: __MODULE__,
