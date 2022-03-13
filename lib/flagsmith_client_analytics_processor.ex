@@ -27,9 +27,9 @@ defmodule Flagsmith.Client.Analytics.Processor do
   #################################
 
   @doc """
-  Given a `t:Flagsmith.Schemas.Features.FeatureState.t` or 
-  `t:Flagsmith.Schemas.Features.Feature.t` or `t:Flagsmith.Schemas.Flag.t` and an
-  `t:Flagsmith.Schemas.Environment.t` or `t:Flagsmith.Configuration.t` add or
+  Given a `t:Flagsmith.Schemas.Features.FeatureState.t/0` or 
+  `t:Flagsmith.Schemas.Features.Feature.t/0` or `t:Flagsmith.Schemas.Flag.t/0` and an
+  `t:Flagsmith.Schemas.Environment.t/0` or `t:Flagsmith.Configuration.t/0` add or
   increment the call count for feature id to be reported to the analytics endpoint.
   If `:enable_analytics` in the configuration value of the environment isn't true
   it's a no op and returns (:noop), otherwise if   the feature/flag doesn't have an
@@ -111,7 +111,7 @@ defmodule Flagsmith.Client.Analytics.Processor do
 
   @doc """
   Starts and links a gen_server represented by this module, using a 
-  `t:Flagsmith.Configuration.t` as the basis to derive its registration name and
+  `t:Flagsmith.Configuration.t/0` as the basis to derive its registration name and
   inner details.
   """
   @spec start_link(Configuration.t()) :: {:ok, pid()}

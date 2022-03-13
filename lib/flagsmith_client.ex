@@ -9,7 +9,7 @@ defmodule Flagsmith.Client do
   @type config_or_env :: Configuration.t() | Keyword.t() | Schemas.Environment.t()
 
   @doc """
-  Create a `t:Flagsmith.Configuration.t` struct with the desired settings to use
+  Create a `t:Flagsmith.Configuration.t/0` struct with the desired settings to use
   in requests.
   All settings are optional with exception of the `:environment_key` if not configured
   at the application level. 
@@ -41,11 +41,11 @@ defmodule Flagsmith.Client do
   end
 
   @doc """
-  Returns an `:ok` tuple containing a `t:Flagsmith.Schemas.Environment.t` struct,
+  Returns an `:ok` tuple containing a `t:Flagsmith.Schemas.Environment.t/0` struct,
   either from the local evaluation or API depending on the configuration used, or an
   `:error` tuple if unable to. 
 
-  Passing a `t:Flagsmith.Configuration.t` or options with `:enable_local_evaluation`
+  Passing a `t:Flagsmith.Configuration.t/0` or options with `:enable_local_evaluation`
   as `true` will start a local process for the given api key used, if one is not 
   started yet, which requires you to be running the `Flagsmith.Supervisor`.
   """
@@ -78,11 +78,11 @@ defmodule Flagsmith.Client do
   end
 
   @doc """
-  Returns an `:ok` tuple containing a list of `t:Flagsmith.Schemas.Flag.t` structs,
+  Returns an `:ok` tuple containing a list of `t:Flagsmith.Schemas.Flag.t/0` structs,
   either from the local evaluation or API depending on the configuration used, or an
   `:error` tuple if unable to. 
 
-  Passing a `t:Flagsmith.Configuration.t` or options with `:enable_local_evaluation`
+  Passing a `t:Flagsmith.Configuration.t/0` or options with `:enable_local_evaluation`
   as `true` will start a local process for the given api key used, if one is not 
   started yet, which requires you to be running the `Flagsmith.Supervisor`.
   """
@@ -115,18 +115,18 @@ defmodule Flagsmith.Client do
   end
 
   @doc """
-  Returns an `:ok` tuple containing a list of `t:Flagsmith.Schemas.Flag.t` structs,
+  Returns an `:ok` tuple containing a list of `t:Flagsmith.Schemas.Flag.t/0` structs,
   either from the local evaluation or API depending on the configuration used, or an
   `:error` tuple if unable to. The flags are retrieved based on a user identifier
   so take into account segments and traits. 
 
   Note: when using local evaluation there's no way to update the
   traits, the traits passed on to this function are used to check any segment rule
-  specified on the `t:Flagsmith.Schemas.Environment.t` you're accessing. On the other
+  specified on the `t:Flagsmith.Schemas.Environment.t/0` you're accessing. On the other
   hand, when using the live API evaluation the traits you pass will be used to update
   the traits associated with the identity you're specifying.
 
-  Passing a `t:Flagsmith.Configuration.t` or options with `:enable_local_evaluation`
+  Passing a `t:Flagsmith.Configuration.t/0` or options with `:enable_local_evaluation`
   as `true` will start a local process for the given api key used, if one is not 
   started yet, which requires you to be running the `Flagsmith.Supervisor`.
   """
@@ -173,8 +173,8 @@ defmodule Flagsmith.Client do
 
   @doc """
   Return all flags from an environment as a list.
-  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
-  `t:Flagsmith.Configuration.t` or list of options, then the flags are extracted
+  If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
+  `t:Flagsmith.Configuration.t/0` or list of options, then the flags are extracted
   from it.
   """
   @spec all_flags(config_or_env()) :: list(Schemas.Flag.t())
@@ -200,8 +200,8 @@ defmodule Flagsmith.Client do
   Returns the `:enabled` status of a feature by name, or `:not_found` if the feature
   doesn't exist.
 
-  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
-  `t:Flagsmith.Configuration.t` or list of options, then the feature is evaluated
+  If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
+  `t:Flagsmith.Configuration.t/0` or list of options, then the feature is evaluated
   from that environment, otherwise a local evaluation or api call is executed
   according to the configuration or passed options.
   """
@@ -229,11 +229,11 @@ defmodule Flagsmith.Client do
     do: is_feature_enabled(new(opts), feature_name)
 
   @doc """
-  Returns a `t:Flagsmith.Schemas.Flag.t` by name, or `:not_found` if the feature
+  Returns a `t:Flagsmith.Schemas.Flag.t/0` by name, or `:not_found` if the feature
   doesn't exist.
 
-  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
-  `t:Flagsmith.Configuration.t` or list of options, then the feature is looked up
+  If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
+  `t:Flagsmith.Configuration.t/0` or list of options, then the feature is looked up
   in that environment, otherwise a local evaluation or api call is executed
   according to the configuration or passed options.
   """
@@ -264,11 +264,11 @@ defmodule Flagsmith.Client do
     do: get_feature_value(new(opts), feature_name)
 
   @doc """
-  Returns a `t:Flagsmith.Schemas.Flag.t` by name, or `:not_found` if the feature
+  Returns a `t:Flagsmith.Schemas.Flag.t/0` by name, or `:not_found` if the feature
   doesn't exist.
 
-  If a `t:Flagsmith.Schemas.Environment.t` is passed instead of a 
-  `t:Flagsmith.Configuration.t` or list of options, then the feature is looked up
+  If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
+  `t:Flagsmith.Configuration.t/0` or list of options, then the feature is looked up
   in that environment, otherwise a local evaluation or api call is executed
   according to the configuration or passed options.
   """
@@ -320,10 +320,10 @@ defmodule Flagsmith.Client do
       do: analytics_track(new(opts), tracking)
 
   @doc """
-  Given an `t:Flagsmith.Schemas.Environment.t` or a list composed of
-  `t:Flagsmith.Schemas.Environment.FeatureState.t` or
-  `t:Flagsmith.Schemas.Features.FeatureState.t` return a map composed of the features
-  names as keys and the features as `t:Flagsmith.Schemas.Flag.t`.
+  Given an `t:Flagsmith.Schemas.Environment.t/0` or a list composed of
+  `t:Flagsmith.Schemas.Environment.FeatureState.t/0` or
+  `t:Flagsmith.Schemas.Features.FeatureState.t/0` return a map composed of the features
+  names as keys and the features as `t:Flagsmith.Schemas.Flag.t/0`.
   """
   @spec extract_flags(
           Schemas.Environment.t()
