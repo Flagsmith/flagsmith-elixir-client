@@ -26,9 +26,6 @@ defmodule Flagsmith.Client.Test do
     [config: Flagsmith.Client.new(environment_key: "client_test_key")]
   end
 
-  describe "config tests" do
-  end
-
   describe "API calls except identity ones" do
     setup %{config: config} do
       # set expectation for the http call 
@@ -175,6 +172,52 @@ defmodule Flagsmith.Client.Test do
 
       # assert it's exactly the same value as when using the env
       assert ^value = Flagsmith.Client.get_feature_value(config, "secret_button")
+    end
+
+    test "get_flag, get_feature_value and is_feature_enabled with default_flag_handler", %{
+      config: config
+    } do
+      new_config = %{
+        config
+        | default_flag_handler: fn feature_name ->
+            %Schemas.Flag{feature_name: "test", enabled: true, value: feature_name}
+          end
+      }
+
+      # set 3 additional expectations
+      Enum.each(1..3, fn _ ->
+        expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+          assert_request(
+            tesla_env,
+            body: nil,
+            query: [],
+            headers: [{@environment_header, config.environment_key}],
+            url: Path.join([@api_url, @api_paths.environment]) <> "/",
+            method: :get
+          )
+
+          {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+        end)
+      end)
+
+      assert {:ok, %Schemas.Environment{} = env} = Flagsmith.Client.get_environment(new_config)
+
+      # assert it works when doing new "http calls"
+
+      assert %Schemas.Flag{feature_name: "test"} =
+               Flagsmith.Client.get_flag(new_config, "doesnt_exist")
+
+      assert "doesnt_exist" = Flagsmith.Client.get_feature_value(new_config, "doesnt_exist")
+
+      assert Flagsmith.Client.is_feature_enabled(new_config, "doesnt_exist")
+
+      # assert it works when doing using an environment
+
+      assert %Schemas.Flag{feature_name: "test"} = Flagsmith.Client.get_flag(env, "doesnt_exist")
+
+      assert "doesnt_exist" = Flagsmith.Client.get_feature_value(env, "doesnt_exist")
+
+      assert Flagsmith.Client.is_feature_enabled(env, "doesnt_exist")
     end
   end
 

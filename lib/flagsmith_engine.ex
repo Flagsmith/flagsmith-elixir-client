@@ -29,7 +29,7 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get the feature states of an `Environment.t()`.
+  Get the feature states of an `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_environment_feature_states(Environment.t()) :: list(Environment.FeatureState.t())
   def get_environment_feature_states(%Environment{
@@ -43,7 +43,8 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get a specific feature state for a given feature_name in a given `Environment.t()`.
+  Get a specific feature state for a given feature_name in a given 
+  `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_environment_feature_state(Environment.t(), name :: String.t()) ::
           Environment.FeatureState.t() | nil
@@ -51,7 +52,8 @@ defmodule Flagsmith.Engine do
     do: Enum.find(fs, fn %{feature: %{name: f_name}} -> f_name == name end)
 
   @doc """
-  Get list of feature states for a given `Identity.t()` in a given `Environment.t()`.
+  Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
+  given `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_identity_feature_states(
           Environment.t(),
@@ -75,8 +77,8 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get feature state with a given feature_name for a given `Identity.t()` and 
-  `Environment.t()`.
+  Get feature state with a given feature_name for a given `t:Flagsmith.Schemas.Identity.t/0`
+  and `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_identity_feature_state(
           Environment.t(),
@@ -111,9 +113,9 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Returns a list of `Environment.FeatureState.t()` where any that has the same name
-  as in the segments provided is replaced by the feature state there specified (if
-  any).
+  Returns a list of `t:Flagsmith.Schemas.Environment.FeatureState.t/0` where any that
+  has the same name as in the segments provided is replaced by the feature state there
+  specified (if any).
   """
   @spec replace_segment_features(
           original :: list(Environment.FeatureState.t()),
@@ -138,9 +140,10 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Returns a list with elements of any of `Environment.FeatureState.t()` or 
-  `Features.FeatureState.t()` where any that has the same name as in any of the
-  identity `Features.FeatureState.t()` provided is replaced by that feature.
+  Returns a list with elements of any of `t:Flagsmith.Schemas.Environment.FeatureState.t/0`
+  or `t:Flagsmith.Schemas.Features.FeatureState.t/0` where any that has the same name
+  as in any of the identity `t:Flagsmith.Schemas.Features.FeatureState.t/0` provided
+  is replaced by that feature.
   """
   @spec replace_identity_features(
           original :: list(Environment.FeatureState.t()),
@@ -302,7 +305,7 @@ defmodule Flagsmith.Engine do
   defp id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
 
   @doc """
-  Given an `Types.Operator.t()`, a cast or uncast segment value, and a cast trait 
+  Given an `t:Flagsmith.Schemas.Types.Operator.t/0`, a cast or uncast segment value, and a cast trait 
   value, evaluate if the trait value matches to the segment value.
   """
   @spec trait_match(

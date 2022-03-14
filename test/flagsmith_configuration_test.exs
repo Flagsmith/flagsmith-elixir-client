@@ -48,7 +48,7 @@ defmodule Flagsmith.Configuration.Test do
              enable_analytics: false
            } = Configuration.build(environment_key: "A")
 
-    assert is_function(flag_handler, 1)
+    assert is_nil(flag_handler)
   end
 
   test "helper funs" do

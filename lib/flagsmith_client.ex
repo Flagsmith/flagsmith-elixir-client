@@ -87,7 +87,7 @@ defmodule Flagsmith.Client do
   started yet, which requires you to be running the `Flagsmith.Supervisor`.
   """
   @spec get_environment_flags(config_or_env()) ::
-          {:ok, list(Schemas.Flag.t())} | {:error, term()}
+          {:ok, %{String.t() => Schemas.Flag.t()}} | {:error, term()}
   def get_environment_flags(configuration_or_env_or_opts \\ [])
 
   def get_environment_flags(%Configuration{enable_local_evaluation: local?} = config) do
@@ -135,7 +135,7 @@ defmodule Flagsmith.Client do
           String.t(),
           list(map() | Schemas.Traits.Trait.t())
         ) ::
-          {:ok, list(Schemas.Flag.t())} | {:error, term()}
+          {:ok, %{String.t() => Schemas.Flag.t()}} | {:error, term()}
   def get_identity_flags(configuration_or_opts \\ [], identifier, traits)
 
   def get_identity_flags(
@@ -159,8 +159,8 @@ defmodule Flagsmith.Client do
     case Tesla.get(http_client(config), @api_paths.identities, query: query) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
         with %Schemas.Identity{flags: flags} <- Schemas.Identity.from_response(body),
-             final_flags <- extract_flags(flags) do
-          {:ok, final_flags}
+             flags_map <- extract_flags(flags) do
+          {:ok, flags_map}
         else
           error ->
             {:error, error}
@@ -207,26 +207,15 @@ defmodule Flagsmith.Client do
   """
   @spec is_feature_enabled(config_or_env(), feature_name :: String.t()) ::
           boolean() | :not_found | term()
-  def is_feature_enabled(configuration_or_env_or_opts \\ [], feature_name)
+  def is_feature_enabled(configuration_or_env_or_opts \\ [], feature_name) do
+    case get_flag(configuration_or_env_or_opts, feature_name) do
+      %Schemas.Flag{enabled: enabled?} ->
+        enabled?
 
-  def is_feature_enabled(%Schemas.Environment{} = env, feature_name) do
-    env
-    |> get_flag(feature_name)
-    |> case do
-      %Schemas.Flag{enabled: enabled?} -> enabled?
-      other -> other
+      error ->
+        error
     end
   end
-
-  def is_feature_enabled(%Configuration{} = config, feature_name) do
-    case get_environment(config) do
-      {:ok, %Schemas.Environment{} = env} -> is_feature_enabled(env, feature_name)
-      error -> error
-    end
-  end
-
-  def is_feature_enabled(opts, feature_name) when is_list(opts),
-    do: is_feature_enabled(new(opts), feature_name)
 
   @doc """
   Returns a `t:Flagsmith.Schemas.Flag.t/0` by name, or `:not_found` if the feature
@@ -239,29 +228,15 @@ defmodule Flagsmith.Client do
   """
   @spec get_feature_value(config_or_env(), feature_name :: String.t()) ::
           :not_found | term()
-  def get_feature_value(configuration_or_env_or_opts \\ [], feature_name)
-
-  def get_feature_value(%Schemas.Environment{} = env, feature_name) do
-    env
-    |> get_flag(feature_name)
-    |> case do
+  def get_feature_value(configuration_or_env_or_opts \\ [], feature_name) do
+    case get_flag(configuration_or_env_or_opts, feature_name) do
       %Schemas.Flag{value: value} ->
         value
 
-      _ ->
-        :not_found
+      error ->
+        error
     end
   end
-
-  def get_feature_value(%Configuration{} = config, feature_name) do
-    case get_environment(config) do
-      {:ok, %Schemas.Environment{} = env} -> get_feature_value(env, feature_name)
-      error -> error
-    end
-  end
-
-  def get_feature_value(opts, feature_name) when is_list(opts),
-    do: get_feature_value(new(opts), feature_name)
 
   @doc """
   Returns a `t:Flagsmith.Schemas.Flag.t/0` by name, or `:not_found` if the feature
@@ -276,21 +251,28 @@ defmodule Flagsmith.Client do
           Schemas.Flag.t() | :not_found | term()
   def get_flag(configuration_or_env_or_opts \\ [], feature_name)
 
-  def get_flag(%Schemas.Environment{} = env, feature_name) do
+  def get_flag(
+        %Schemas.Environment{__configuration__: %{default_flag_handler: handler}} = env,
+        feature_name
+      ) do
     env
     |> extract_flags()
     |> case do
       %{^feature_name => %Schemas.Flag{} = flag} ->
         maybe_track(flag, env)
 
+      _ when is_function(handler, 1) ->
+        handler.(feature_name)
+
       _ ->
         :not_found
     end
   end
 
-  def get_flag(%Configuration{} = config, feature_name) do
+  def get_flag(%Configuration{default_flag_handler: handler} = config, feature_name) do
     case get_environment(config) do
       {:ok, %Schemas.Environment{} = env} -> get_flag(env, feature_name)
+      _error when is_function(handler, 1) -> handler.(feature_name)
       error -> error
     end
   end
@@ -298,10 +280,9 @@ defmodule Flagsmith.Client do
   def get_flag(opts, feature_name) when is_list(opts),
     do: get_flag(new(opts), feature_name)
 
-  @doc """
-  Submits a map of `feature_id => number_of_accesses` to the Flagsmith analytics
-  endpoint for usage tracking.
-  """
+  @doc false
+  # Submits a map of `feature_id => number_of_accesses` to the Flagsmith analytics
+  # endpoint for usage tracking.
   @spec analytics_track(Configuration.t() | Keyword.t(), map()) :: {:ok, map()} | {:error, term}
   def analytics_track(configuration_or_env_or_opts \\ [], tracking)
 
@@ -319,12 +300,11 @@ defmodule Flagsmith.Client do
       when is_list(opts) and is_map(tracking) and not is_struct(tracking),
       do: analytics_track(new(opts), tracking)
 
-  @doc """
-  Given an `t:Flagsmith.Schemas.Environment.t/0` or a list composed of
-  `t:Flagsmith.Schemas.Environment.FeatureState.t/0` or
-  `t:Flagsmith.Schemas.Features.FeatureState.t/0` return a map composed of the features
-  names as keys and the features as `t:Flagsmith.Schemas.Flag.t/0`.
-  """
+  @doc false
+  # Given an `t:Flagsmith.Schemas.Environment.t/0` or a list composed of
+  # `t:Flagsmith.Schemas.Environment.FeatureState.t/0` or
+  # `t:Flagsmith.Schemas.Features.FeatureState.t/0` return a map composed of the
+  # features names as keys and the features as `t:Flagsmith.Schemas.Flag.t/0`.
   @spec extract_flags(
           Schemas.Environment.t()
           | list(Schemas.Features.FeatureState.t() | Schemas.Environment.FeatureState.t())

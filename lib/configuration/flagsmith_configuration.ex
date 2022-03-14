@@ -15,8 +15,8 @@ defmodule Flagsmith.Configuration do
   @enforce_keys [:environment_key]
   defstruct [
     :environment_key,
+    :default_flag_handler,
     api_url: @default_url,
-    default_flag_handler: &Schemas.Features.FeatureState.from_response/1,
     custom_headers: [],
     request_timeout_milliseconds: 5000,
     enable_local_evaluation: false,
@@ -56,8 +56,10 @@ defmodule Flagsmith.Configuration do
 
   @doc false
   @spec api_paths() :: map()
-  @spec api_paths(what :: atom()) :: String.t() | no_return
   def api_paths(), do: @api_paths
+
+  @doc false
+  @spec api_paths(what :: atom()) :: String.t() | no_return
   def api_paths(what), do: Map.fetch!(@api_paths, what)
 
   @doc false
