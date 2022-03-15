@@ -105,19 +105,23 @@ defmodule Flagsmith.Client.Poller do
   def handle_event({:call, from}, :get_environment, _, %__MODULE__{environment: env}),
     do: {:keep_state_and_data, [{:reply, from, {:ok, env}}]}
 
-  def handle_event({:call, from}, :get_flags, _, %__MODULE__{environment: env}) do
-    {:keep_state_and_data, [{:reply, from, {:ok, Flagsmith.Client.extract_flags(env)}}]}
+  def handle_event({:call, from}, :get_flags, _, %__MODULE__{
+        environment: env,
+        configuration: config
+      }) do
+    {:keep_state_and_data, [{:reply, from, {:ok, Flagsmith.Client.build_flags(env, config)}}]}
   end
 
   def handle_event({:call, from}, {:get_identity_flags, identifier, traits}, _, %__MODULE__{
-        environment: env
+        environment: env,
+        configuration: config
       }) do
     identity = Schemas.Identity.from_id_traits(identifier, traits, env.api_key)
 
     flags =
       env
       |> Flagsmith.Engine.get_identity_feature_states(identity)
-      |> Flagsmith.Client.extract_flags()
+      |> Flagsmith.Client.build_flags(config)
 
     {:keep_state_and_data, [{:reply, from, {:ok, flags}}]}
   end

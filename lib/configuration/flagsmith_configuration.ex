@@ -1,6 +1,4 @@
 defmodule Flagsmith.Configuration do
-  alias Flagsmith.Schemas
-
   @default_url "https://api.flagsmith.com/api/v1"
   @environment_header "X-Environment-Key"
 

@@ -47,30 +47,32 @@ defmodule Flagsmith.Client.Test do
 
     test "get_environment_flags", %{config: config} do
       assert {:ok,
-              %{
-                "body_size" => %Schemas.Flag{
-                  enabled: false,
-                  feature_id: 13535,
-                  feature_name: "body_size",
-                  value: "18px"
-                },
-                "header_size" => %Schemas.Flag{
-                  enabled: false,
-                  feature_id: 13534,
-                  feature_name: "header_size",
-                  value: "24px"
-                },
-                "secret_button" => %Schemas.Flag{
-                  enabled: true,
-                  feature_id: 17985,
-                  feature_name: "secret_button",
-                  value: "{\"colour\": \"#ababab\"}"
-                },
-                "test_identity" => %Schemas.Flag{
-                  enabled: true,
-                  feature_id: 18382,
-                  feature_name: "test_identity",
-                  value: "very_yes"
+              %Schemas.Flags{
+                flags: %{
+                  "body_size" => %Schemas.Flag{
+                    enabled: false,
+                    feature_id: 13535,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Schemas.Flag{
+                    enabled: false,
+                    feature_id: 13534,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Schemas.Flag{
+                    enabled: true,
+                    feature_id: 17985,
+                    feature_name: "secret_button",
+                    value: "{\"colour\": \"#ababab\"}"
+                  },
+                  "test_identity" => %Schemas.Flag{
+                    enabled: true,
+                    feature_id: 18382,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
                 }
               }} = Flagsmith.Client.get_environment_flags(config)
 
@@ -97,6 +99,20 @@ defmodule Flagsmith.Client.Test do
       end)
 
       assert ^all_flags = Flagsmith.Client.all_flags(config)
+
+      # with Schemas.Flags
+      assert {:ok, %Schemas.Flags{} = flags_schema} = Flagsmith.Client.get_environment_flags(env)
+      # the flags might have a different order because they come from a map that is
+      # unordered, so we can't simply assert that it's the same with a ^ pin operator
+      assert all_flags_2 = Flagsmith.Client.all_flags(flags_schema)
+
+      # but we can by making sure it's the same size and each element is present in
+      # the second list
+      assert length(all_flags) == length(all_flags_2)
+
+      assert Enum.all?(all_flags, fn flag ->
+               assert Enum.any?(all_flags_2, fn flag_2 -> flag == flag_2 end)
+             end)
     end
 
     test "is_feature_enabled", %{config: config} do
@@ -120,6 +136,12 @@ defmodule Flagsmith.Client.Test do
       end)
 
       assert Flagsmith.Client.is_feature_enabled(config, "secret_button")
+
+      # with Schemas.Flags
+      assert {:ok, %Schemas.Flags{} = flags} = Flagsmith.Client.get_environment_flags(env)
+
+      assert Flagsmith.Client.is_feature_enabled(flags, "secret_button")
+      refute Flagsmith.Client.is_feature_enabled(flags, "body_size")
     end
 
     test "get_flag", %{config: config} do
@@ -148,6 +170,11 @@ defmodule Flagsmith.Client.Test do
 
       # assert it's exactly the same flag as when using the env
       assert ^flag = Flagsmith.Client.get_flag(config, "secret_button")
+
+      # with Schemas.Flags
+      assert {:ok, %Schemas.Flags{} = flags} = Flagsmith.Client.get_environment_flags(env)
+
+      assert ^flag = Flagsmith.Client.get_flag(flags, "secret_button")
     end
 
     test "get_feature_value", %{config: config} do
@@ -172,6 +199,11 @@ defmodule Flagsmith.Client.Test do
 
       # assert it's exactly the same value as when using the env
       assert ^value = Flagsmith.Client.get_feature_value(config, "secret_button")
+
+      # with Schemas.Flags
+      assert {:ok, %Schemas.Flags{} = flags} = Flagsmith.Client.get_environment_flags(env)
+
+      assert ^value = Flagsmith.Client.get_feature_value(flags, "secret_button")
     end
 
     test "get_flag, get_feature_value and is_feature_enabled with default_flag_handler", %{
@@ -211,13 +243,23 @@ defmodule Flagsmith.Client.Test do
 
       assert Flagsmith.Client.is_feature_enabled(new_config, "doesnt_exist")
 
-      # assert it works when doing using an environment
+      # assert it works when using an Schemas.Environment
 
       assert %Schemas.Flag{feature_name: "test"} = Flagsmith.Client.get_flag(env, "doesnt_exist")
 
       assert "doesnt_exist" = Flagsmith.Client.get_feature_value(env, "doesnt_exist")
 
       assert Flagsmith.Client.is_feature_enabled(env, "doesnt_exist")
+
+      # assert it works when using a Schemas.Flags
+      assert {:ok, %Schemas.Flags{} = flags} = Flagsmith.Client.get_environment_flags(env)
+
+      assert %Schemas.Flag{feature_name: "test"} =
+               Flagsmith.Client.get_flag(flags, "doesnt_exist")
+
+      assert "doesnt_exist" = Flagsmith.Client.get_feature_value(flags, "doesnt_exist")
+
+      assert Flagsmith.Client.is_feature_enabled(flags, "doesnt_exist")
     end
   end
 
@@ -239,30 +281,32 @@ defmodule Flagsmith.Client.Test do
 
       assert {
                :ok,
-               %{
-                 "body_size" => %Schemas.Flag{
-                   enabled: false,
-                   feature_id: 13535,
-                   feature_name: "body_size",
-                   value: "18px"
-                 },
-                 "header_size" => %Schemas.Flag{
-                   enabled: false,
-                   feature_id: 13534,
-                   feature_name: "header_size",
-                   value: "34px"
-                 },
-                 "secret_button" => %Schemas.Flag{
-                   enabled: true,
-                   feature_id: 17985,
-                   feature_name: "secret_button",
-                   value: nil
-                 },
-                 "test_identity" => %Schemas.Flag{
-                   enabled: true,
-                   feature_id: 18382,
-                   feature_name: "test_identity",
-                   value: "very_no"
+               %Schemas.Flags{
+                 flags: %{
+                   "body_size" => %Schemas.Flag{
+                     enabled: false,
+                     feature_id: 13535,
+                     feature_name: "body_size",
+                     value: "18px"
+                   },
+                   "header_size" => %Schemas.Flag{
+                     enabled: false,
+                     feature_id: 13534,
+                     feature_name: "header_size",
+                     value: "34px"
+                   },
+                   "secret_button" => %Schemas.Flag{
+                     enabled: true,
+                     feature_id: 17985,
+                     feature_name: "secret_button",
+                     value: nil
+                   },
+                   "test_identity" => %Schemas.Flag{
+                     enabled: true,
+                     feature_id: 18382,
+                     feature_name: "test_identity",
+                     value: "very_no"
+                   }
                  }
                }
              } = Flagsmith.Client.get_identity_flags(config, "super1234324", [])

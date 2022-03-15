@@ -98,7 +98,7 @@ defmodule Flagsmith.Client do
   end
 
   def get_environment_flags(%Schemas.Environment{} = env),
-    do: {:ok, extract_flags(env)}
+    do: {:ok, build_flags(env)}
 
   def get_environment_flags(opts) when is_list(opts),
     do: get_environment_flags(new(opts))
@@ -107,11 +107,30 @@ defmodule Flagsmith.Client do
   defp get_environment_flags_request(%Configuration{} = config) do
     case get_environment_request(config) do
       {:ok, %Schemas.Environment{} = env} ->
-        {:ok, extract_flags(env)}
+        {:ok, build_flags(env, config)}
 
       error ->
         error
     end
+  end
+
+  @doc false
+  def build_flags(%Schemas.Environment{__configuration__: %Configuration{} = config} = env),
+    do: build_flags(env, config)
+
+  def build_flags(%Schemas.Environment{} = env, %Configuration{} = config) do
+    env
+    |> extract_flags()
+    |> Schemas.Flags.new(config)
+  end
+
+  def build_flags(flags, %Configuration{} = config) when is_map(flags),
+    do: Schemas.Flags.new(flags, config)
+
+  def build_flags(flags, %Configuration{} = config) when is_list(flags) do
+    flags
+    |> extract_flags()
+    |> Schemas.Flags.new(config)
   end
 
   @doc """
@@ -159,8 +178,8 @@ defmodule Flagsmith.Client do
     case Tesla.get(http_client(config), @api_paths.identities, query: query) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
         with %Schemas.Identity{flags: flags} <- Schemas.Identity.from_response(body),
-             flags_map <- extract_flags(flags) do
-          {:ok, flags_map}
+             flags <- build_flags(flags, config) do
+          {:ok, flags}
         else
           error ->
             {:error, error}
@@ -178,13 +197,16 @@ defmodule Flagsmith.Client do
   from it.
   """
   @spec all_flags(config_or_env()) :: list(Schemas.Flag.t())
-  def all_flags(configuration_or_env_or_opts \\ [])
+  def all_flags(config_or_opts_or_env_or_flags \\ [])
 
   def all_flags(%Schemas.Environment{} = env) do
     env
     |> Flagsmith.Engine.get_environment_feature_states()
     |> Enum.map(&Schemas.Flag.from(&1))
   end
+
+  def all_flags(%Schemas.Flags{flags: flags}),
+    do: Enum.map(flags, fn {_, flag} -> flag end)
 
   def all_flags(%Configuration{} = config) do
     case get_environment(config) do
@@ -239,15 +261,16 @@ defmodule Flagsmith.Client do
   end
 
   @doc """
-  Returns a `t:Flagsmith.Schemas.Flag.t/0` by name, or `:not_found` if the feature
-  doesn't exist.
+  Returns a `t:Flagsmith.Schemas.Flag.t/0` by name. If the feature doesn't exist, 
+  it returns `:not_found` by default or in case `default_flag_handler` has been set
+  returns what the call to that function with the feature name returns.
 
   If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
   `t:Flagsmith.Configuration.t/0` or list of options, then the feature is looked up
   in that environment, otherwise a local evaluation or api call is executed
   according to the configuration or passed options.
   """
-  @spec get_flag(config_or_env(), feature_name :: String.t()) ::
+  @spec get_flag(config_or_env() | Schemas.Flags.t(), feature_name :: String.t()) ::
           Schemas.Flag.t() | :not_found | term()
   def get_flag(configuration_or_env_or_opts \\ [], feature_name)
 
@@ -257,9 +280,29 @@ defmodule Flagsmith.Client do
       ) do
     env
     |> extract_flags()
+    |> Map.get(feature_name)
     |> case do
-      %{^feature_name => %Schemas.Flag{} = flag} ->
+      %Schemas.Flag{} = flag ->
         maybe_track(flag, env)
+
+      _ when is_function(handler, 1) ->
+        handler.(feature_name)
+
+      _ ->
+        :not_found
+    end
+  end
+
+  def get_flag(
+        %Schemas.Flags{
+          __configuration__: %{default_flag_handler: handler} = config,
+          flags: flags
+        },
+        feature_name
+      ) do
+    case Map.get(flags, feature_name) do
+      %Schemas.Flag{} = flag ->
+        maybe_track(flag, config)
 
       _ when is_function(handler, 1) ->
         handler.(feature_name)
@@ -309,7 +352,7 @@ defmodule Flagsmith.Client do
           Schemas.Environment.t()
           | list(Schemas.Features.FeatureState.t() | Schemas.Environment.FeatureState.t())
         ) :: %{String.t() => Schemas.Flag.t()}
-  def extract_flags(%Schemas.Environment{} = env) do
+  defp extract_flags(%Schemas.Environment{} = env) do
     env
     |> Flagsmith.Engine.get_environment_feature_states()
     |> Enum.reduce(%{}, fn feature_state, acc ->
@@ -318,7 +361,7 @@ defmodule Flagsmith.Client do
     end)
   end
 
-  def extract_flags(feature_states) when is_list(feature_states) do
+  defp extract_flags(feature_states) when is_list(feature_states) do
     Enum.reduce(feature_states, %{}, fn feature_state, acc ->
       %Schemas.Flag{feature_name: name} = flag = Schemas.Flag.from(feature_state)
       Map.put(acc, name, flag)

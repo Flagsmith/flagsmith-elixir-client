@@ -82,30 +82,32 @@ defmodule Flagsmith.Client.Poller.Test do
 
       # assert we can also get the feature flags
       {:ok,
-       %{
-         "header_size" => %Schemas.Flag{
-           enabled: false,
-           feature_id: 13534,
-           feature_name: "header_size",
-           value: "24px"
-         },
-         "body_size" => %Schemas.Flag{
-           enabled: false,
-           feature_id: 13535,
-           feature_name: "body_size",
-           value: "18px"
-         },
-         "secret_button" => %Schemas.Flag{
-           enabled: true,
-           feature_id: 17985,
-           feature_name: "secret_button",
-           value: "{\"colour\": \"#ababab\"}"
-         },
-         "test_identity" => %Schemas.Flag{
-           enabled: true,
-           feature_id: 18382,
-           feature_name: "test_identity",
-           value: "very_yes"
+       %Schemas.Flags{
+         flags: %{
+           "header_size" => %Schemas.Flag{
+             enabled: false,
+             feature_id: 13534,
+             feature_name: "header_size",
+             value: "24px"
+           },
+           "body_size" => %Schemas.Flag{
+             enabled: false,
+             feature_id: 13535,
+             feature_name: "body_size",
+             value: "18px"
+           },
+           "secret_button" => %Schemas.Flag{
+             enabled: true,
+             feature_id: 17985,
+             feature_name: "secret_button",
+             value: "{\"colour\": \"#ababab\"}"
+           },
+           "test_identity" => %Schemas.Flag{
+             enabled: true,
+             feature_id: 18382,
+             feature_name: "test_identity",
+             value: "very_yes"
+           }
          }
        }} = Flagsmith.Client.get_environment_flags(config)
     end
@@ -190,8 +192,15 @@ defmodule Flagsmith.Client.Poller.Test do
         Flagsmith.Client.get_environment(config)
 
       # we can also assert that it's 4 flags as well when asking directly for them
-      {:ok, %{"header_size" => _, "body_size" => _, "secret_button" => _, "test_identity" => _}} =
-        Flagsmith.Client.get_environment_flags(config)
+      {:ok,
+       %Schemas.Flags{
+         flags: %{
+           "header_size" => _,
+           "body_size" => _,
+           "secret_button" => _,
+           "test_identity" => _
+         }
+       }} = Flagsmith.Client.get_environment_flags(config)
 
       # now in order to allow the spawned process to be used to verify the mock
       # expectation we do a reduce, mimicking a loop, since we are expecting much
@@ -236,7 +245,7 @@ defmodule Flagsmith.Client.Poller.Test do
       # enough for the process to reflect its new env
       Process.sleep(5)
       # then we call the client for env flags with the same config
-      {:ok, flags} = Flagsmith.Client.get_environment_flags(config)
+      {:ok, %Schemas.Flags{flags: flags}} = Flagsmith.Client.get_environment_flags(config)
 
       # we assert that now it's an empty map, meaning it has 0 flags
       assert flags == %{}
