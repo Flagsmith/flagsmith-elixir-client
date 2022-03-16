@@ -9,6 +9,8 @@ defmodule Flagsmith.Schemas.Traits.Trait do
   from the api.
   """
 
+  @derive {Jason.Encoder, only: [:trait_key, :trait_value]}
+
   @primary_key {:id, :id, autogenerate: false}
   typed_embedded_schema do
     field(:trait_key, :string)

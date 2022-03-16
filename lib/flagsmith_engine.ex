@@ -281,7 +281,7 @@ defmodule Flagsmith.Engine do
         _segment_id,
         _identifier
       ) do
-    Enum.all?(traits, fn %Traits.Trait{
+    Enum.any?(traits, fn %Traits.Trait{
                            trait_key: t_key,
                            trait_value: t_value
                          } ->
@@ -296,7 +296,7 @@ defmodule Flagsmith.Engine do
           end
 
         _ ->
-          true
+          false
       end
     end)
   end

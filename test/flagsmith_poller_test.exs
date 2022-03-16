@@ -357,8 +357,9 @@ defmodule Flagsmith.Client.Poller.Test do
                 }
               }} = Flagsmith.Client.get_environment_flags(config)
 
-      # secret_button should be overriden by the percentage segment
-      # header_size should be overriden by multivariate
+      # secret_button should be overriden by the percentage segment because the hashing
+      # of "testing" + segment is enough for the percentage of that segment to match
+      # header_size should be overriden by multivariate again due to %
       assert {:ok,
               %Flagsmith.Schemas.Flags{
                 __configuration__: %Flagsmith.Configuration{},
@@ -387,6 +388,71 @@ defmodule Flagsmith.Client.Poller.Test do
               }} = Flagsmith.Client.get_identity_flags(config, "testing", [])
 
       assert ^pid = Flagsmith.Client.Poller.whereis(config.environment_key)
+
+      # a different id that hashes both to higher than 80% in the multivariate part
+      # and higher than 50% on the PERCENTAGE_SPLIT segment eval
+      # this should render the header_size with the environment value and the same
+      # for the secret_button
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: "{\"colour\": \"#ababab\"}"
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} = Flagsmith.Client.get_identity_flags(config, "24", [])
+
+      # the same id (meaning it should hash to the same things, but now passing a trait
+      # results in a the secret_button being nil according to another segment rule
+      # since the only thing that changes is providing traits to the function it
+      # should assert that indeed traits affect the final resolution of the flags
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: nil
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} =
+               Flagsmith.Client.get_identity_flags(config, "24", [
+                 %{trait_key: "show_popup", trait_value: false}
+               ])
     end
   end
 

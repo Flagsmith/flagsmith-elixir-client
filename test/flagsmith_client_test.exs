@@ -269,11 +269,11 @@ defmodule Flagsmith.Client.Test do
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         assert_request(
           tesla_env,
-          body: nil,
+          body: "{\"identifier\":\"super1234324\"}",
           query: [],
           headers: [{@environment_header, config.environment_key}],
           url: Path.join([@api_url, @api_paths.identities]) <> "/",
-          method: :get
+          method: :post
         )
 
         {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_identity()}}
@@ -282,6 +282,7 @@ defmodule Flagsmith.Client.Test do
       assert {
                :ok,
                %Schemas.Flags{
+                 __configuration__: ^config,
                  flags: %{
                    "body_size" => %Schemas.Flag{
                      enabled: false,

@@ -175,7 +175,7 @@ defmodule Flagsmith.Client do
   def get_identity_flags_request(%Configuration{} = config, identifier, traits) do
     query = build_identity_params(identifier, traits)
 
-    case Tesla.get(http_client(config), @api_paths.identities, query: query) do
+    case Tesla.post(http_client(config), @api_paths.identities, query) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
         with %Schemas.Identity{flags: flags} <- Schemas.Identity.from_response(body),
              flags <- build_flags(flags, config) do
@@ -375,14 +375,14 @@ defmodule Flagsmith.Client do
   end
 
   defp build_identity_params(identifier, [_ | _] = traits) do
-    [
+    %{
       identifier: identifier,
       traits: Schemas.Traits.Trait.from(traits)
-    ]
+    }
   end
 
   defp build_identity_params(identifier, _),
-    do: [identifier: identifier]
+    do: %{identifier: identifier}
 
   @doc false
   @spec auth_middleware(environment_key :: String.t()) ::
