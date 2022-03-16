@@ -4,12 +4,12 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "0.1.5",
+      version: "0.1.7",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      source_url: "https://github.com/Flagsmith/flagsmith-elixir-flag-engine",
+      source_url: "https://github.com/Flagsmith/flagsmith-elixir-client",
       homepage_url: "https://hexdocs.pm/flagsmith_engine/readme.html",
       docs: [
         main: "Flagsmith.Client",
@@ -28,7 +28,7 @@ defmodule FlagsmithEngine.MixProject do
         exclude_patterns: [~r/.*~$/, ~r/#.*#$/],
         licenses: ["MIT"],
         links: %{
-          "github/readme" => "https://github.com/Flagsmith/flagsmith-elixir-flag-engine"
+          "github/readme" => "https://github.com/Flagsmith/flagsmith-elixir-client"
         }
       ]
     ]

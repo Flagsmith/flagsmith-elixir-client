@@ -25,7 +25,7 @@ defmodule Flagsmith.Client.Poller.Supervisor do
         id: Flagsmith.Client.Poller,
         start: {Flagsmith.Client.Poller, :start_link, [config]},
         shutdown: 25_000,
-        restart: :temporary,
+        restart: :permanent,
         type: :worker
       }
     )

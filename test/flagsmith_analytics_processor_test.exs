@@ -192,22 +192,25 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       # the call
       allow(Tesla.Adapter.Mock, self(), pid)
 
-      # afterwars the tracking map should be empty so it will not do any other attempts
-      # to dump, so this inadvertently tests that after a dump the tracking map is
-      # effectively empty
+      # afterwards the tracking map should be empty so it will not do any other
+      # attempts to dump, meaning this inadvertently tests that after a dump the
+      # tracking map is effectively empty
 
       assert Flagsmith.Client.is_feature_enabled(environment, "secret_button")
 
-      Process.sleep(5)
+      assert Flagsmith.Test.Helpers.wait_until(
+               fn ->
+                 {:on,
+                  %Flagsmith.Client.Analytics.Processor{
+                    configuration: ^config,
+                    dump: 1,
+                    tracking: tracking_map
+                  }} = :sys.get_state(pid)
 
-      assert {:on,
-              %Flagsmith.Client.Analytics.Processor{
-                configuration: ^config,
-                dump: 1,
-                tracking: tracking_map
-              }} = :sys.get_state(pid)
-
-      assert tracking_map == %{}
+                 tracking_map == %{}
+               end,
+               15
+             )
     end
   end
 end

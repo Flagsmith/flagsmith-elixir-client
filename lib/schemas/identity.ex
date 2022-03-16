@@ -25,6 +25,12 @@ defmodule Flagsmith.Schemas.Identity do
     |> cast_embed(:flags)
   end
 
+  @doc false
+  @spec from_id_traits(
+          identifier :: String.t(),
+          Flagsmith.Schemas.Traits.Trait.from_types(),
+          environment_key :: nil | String.t()
+        ) :: __MODULE__.t()
   def from_id_traits(identifier, traits, environment_key \\ nil),
     do: %__MODULE__{
       identifier: identifier,
@@ -49,6 +55,9 @@ defmodule Flagsmith.Schemas.Identity do
 
   def from_response(element), do: element
 
+  @doc false
+  @spec set_env_key(__MODULE__.t(), Flagsmith.Schemas.Environment.t() | String.t()) ::
+          __MODULE__.t()
   def set_env_key(%__MODULE__{} = struct, %Flagsmith.Schemas.Environment{api_key: environment_key})
       when is_binary(environment_key),
       do: set_env_key(struct, environment_key)
@@ -56,10 +65,14 @@ defmodule Flagsmith.Schemas.Identity do
   def set_env_key(%__MODULE__{} = struct, environment_key) when is_binary(environment_key),
     do: %{struct | environment_key: environment_key}
 
+  @doc false
+  @spec composite_key(__MODULE__.t()) :: String.t()
   def composite_key(%__MODULE__{identifier: identifier, environment_key: environment_key})
       when is_binary(environment_key),
       do: "#{environment_key}_#{identifier}"
 
+  @doc false
+  @spec composite_key(__MODULE__.t(), String.t()) :: String.t()
   def composite_key(%__MODULE__{identifier: identifier}, environment_key)
       when is_binary(environment_key),
       do: "#{environment_key}_#{identifier}"

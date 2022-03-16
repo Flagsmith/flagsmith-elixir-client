@@ -25,7 +25,7 @@ defmodule Flagsmith.Client.Analytics.Processor.Supervisor do
         id: Flagsmith.Client.Analytics.Processor,
         start: {Flagsmith.Client.Analytics.Processor, :start_link, [config]},
         shutdown: 25_000,
-        restart: :temporary,
+        restart: :permanent,
         type: :worker
       }
     )

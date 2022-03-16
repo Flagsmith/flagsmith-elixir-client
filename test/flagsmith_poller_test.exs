@@ -241,14 +241,18 @@ defmodule Flagsmith.Client.Poller.Test do
                end
              end)
 
-      # the timeout for refresh is 3millisecond so waiting 5 should be more than
-      # enough for the process to reflect its new env
-      Process.sleep(5)
-      # then we call the client for env flags with the same config
-      {:ok, %Schemas.Flags{flags: flags}} = Flagsmith.Client.get_environment_flags(config)
+      # we use wait_until to make sure the flags eventually change, within a max 15
+      # millisecond window by calling the client for env flags with the same config
+      # and checking if the flags are now an empty map
+      assert Flagsmith.Test.Helpers.wait_until(
+               fn ->
+                 {:ok, %Schemas.Flags{flags: flags}} =
+                   Flagsmith.Client.get_environment_flags(config)
 
-      # we assert that now it's an empty map, meaning it has 0 flags
-      assert flags == %{}
+                 flags == %{}
+               end,
+               15
+             )
 
       # finally a sanity check that the poller is still the same pid, making sure
       # it wasn't blown out somewhere along the process and restarted itself
@@ -326,13 +330,256 @@ defmodule Flagsmith.Client.Poller.Test do
     end
 
     test "get_identity_flags", %{poller_pid: pid, config: config} do
-      Flagsmith.Client.get_identity_flags(config, 1, [
-        %{trait_value: "false", trait_key: "show_popup"}
-      ])
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: "{\"colour\": \"#ababab\"}"
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} = Flagsmith.Client.get_environment_flags(config)
 
-      # |> IO.inspect()
+      # secret_button should be overriden by the percentage segment because the hashing
+      # of "testing" + segment is enough for the percentage of that segment to match
+      # header_size should be overriden by multivariate again due to %
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "34px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: nil
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} = Flagsmith.Client.get_identity_flags(config, "testing", [])
 
       assert ^pid = Flagsmith.Client.Poller.whereis(config.environment_key)
+
+      # a different id that hashes both to higher than 80% in the multivariate part
+      # and higher than 50% on the PERCENTAGE_SPLIT segment eval
+      # this should render the header_size with the environment value and the same
+      # for the secret_button
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: "{\"colour\": \"#ababab\"}"
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} = Flagsmith.Client.get_identity_flags(config, "24", [])
+
+      # the same id (meaning it should hash to the same things, but now passing a trait
+      # results in a the secret_button being nil according to another segment rule
+      # since the only thing that changes is providing traits to the function it
+      # should assert that indeed traits affect the final resolution of the flags
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: nil
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} =
+               Flagsmith.Client.get_identity_flags(config, "24", [
+                 %{trait_key: "show_popup", trait_value: false}
+               ])
+    end
+  end
+
+  describe "api call errors" do
+    setup do
+      config =
+        Flagsmith.Client.new(
+          enable_local_evaluation: true,
+          environment_key: "test_key"
+        )
+
+      [config: config]
+    end
+
+    test "initializing with api error", %{config: config} do
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, "test_key"}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:error, :noop}
+      end)
+
+      # here we start it through the dynamic supervisor instead of directly
+      # since we don't want the process exit to exit the test as well
+      {:ok, pid} = Flagsmith.Client.Poller.Supervisor.start_child(config)
+
+      allow(Tesla.Adapter.Mock, self(), pid)
+
+      # we assert that we'll have an exit from the function since the call will fail
+      assert catch_exit(Flagsmith.Client.get_environment(config))
+    end
+
+    test "refresh with errors retries in next cycle", %{config: config} do
+      config = %{config | environment_refresh_interval_milliseconds: 3}
+      env_response = Jason.decode!(Test.Generators.json_env())
+
+      # expectation for first call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, "test_key"}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: env_response}}
+      end)
+
+      # expectation for refresh call 1
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, "test_key"}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:error, :noop}
+      end)
+
+      # expectation for refresh call 2
+      # similar to what we did previously to test the refreshes
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, "test_key"}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        poller_pid = Flagsmith.Client.Poller.whereis("test_key")
+        :ok = :gen_statem.call(poller_pid, {:update_refresh_rate, 60_000})
+        new_env_response = %{env_response | "feature_states" => []}
+
+        {:ok, %Tesla.Env{status: 200, body: new_env_response}}
+      end)
+
+      {:ok, pid} = Flagsmith.Client.Poller.Supervisor.start_child(config)
+
+      allow(Tesla.Adapter.Mock, self(), pid)
+
+      :erlang.trace(pid, true, [:procs])
+
+      # we should now have 2 spawns calls the first fails, so another one afterwards
+      assert Enum.reduce_while(1..100, false, fn _, acc ->
+               receive do
+                 {:trace, ^pid, :spawn, spawned_pid,
+                  {Flagsmith.Client.Poller, :get_environment, [^pid, ^config]}} ->
+                   allow(Tesla.Adapter.Mock, self(), spawned_pid)
+
+                   case acc do
+                     true ->
+                       {:halt, true}
+
+                     false ->
+                       {:cont, true}
+                   end
+
+                 _others ->
+                   {:cont, false}
+               after
+                 200 ->
+                   {:halt, false}
+               end
+             end)
+
+      assert Flagsmith.Test.Helpers.wait_until(
+               fn ->
+                 {:ok, %Schemas.Flags{flags: flags}} =
+                   Flagsmith.Client.get_environment_flags(config)
+
+                 flags == %{}
+               end,
+               15
+             )
     end
   end
 end

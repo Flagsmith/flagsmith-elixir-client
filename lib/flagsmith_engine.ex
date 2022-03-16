@@ -71,9 +71,41 @@ defmodule Flagsmith.Engine do
     with identity <- Identity.set_env_key(identity, env),
          segment_features <- get_segment_features(segments, identity, override_traits),
          replaced <- replace_segment_features(fs, segment_features),
-         final_features <- replace_identity_features(replaced, identity_features) do
+         pre_features <- replace_identity_features(replaced, identity_features),
+         final_features <- replace_multivariates(pre_features, identity) do
       final_features
     end
+  end
+
+  defp replace_multivariates(features, %Identity{identifier: identity_id}) do
+    features
+    |> Enum.map(fn %{feature: %{type: type}} = feature_state ->
+      case type do
+        "MULTIVARIATE" ->
+          uuid = Environment.FeatureState.get_hashing_id(feature_state)
+          mv_fs = Map.get(feature_state, :multivariate_feature_state_values, [])
+          percentage = percentage_from_ids([uuid, identity_id])
+
+          case find_first_multivariate(mv_fs, percentage) do
+            {:ok, new_value} -> %{feature_state | feature_state_value: new_value}
+            _ -> feature_state
+          end
+
+        _ ->
+          feature_state
+      end
+    end)
+  end
+
+  defp find_first_multivariate(mvs, percentage) do
+    Enum.reduce_while(mvs, 0, fn %{percentage_allocation: p_allot} = mv, start_perc ->
+      limit = p_allot + start_perc
+
+      case start_perc <= percentage and percentage < limit do
+        true -> {:halt, Environment.FeatureState.extract_multivariate_value(mv)}
+        _ -> {:cont, limit}
+      end
+    end)
   end
 
   @doc """
@@ -122,19 +154,13 @@ defmodule Flagsmith.Engine do
           to_replace :: list(Segments.Segment.t())
         ) :: list(Environment.FeatureState.t())
   def replace_segment_features(original, to_replace) do
-    Enum.reduce(to_replace, original, fn %{name: replacement_name, feature_states: segment_fs},
-                                         acc ->
-      Enum.map(acc, fn %{feature: %{name: feature_name}} = flag ->
-        case replacement_name == feature_name do
-          true ->
-            case Enum.reduce(segment_fs, nil, fn segment, _ -> segment end) do
-              nil -> flag
-              replacement -> replacement
-            end
+    Enum.reduce(to_replace, original, fn %{feature_states: segment_fs}, acc ->
+      inverted = Enum.reverse(segment_fs)
 
-          _ ->
-            flag
-        end
+      Enum.map(acc, fn %{feature: %{name: feature_name}} = flag ->
+        Enum.find(inverted, flag, fn %{feature: %{name: replacement_name}} ->
+          replacement_name == feature_name
+        end)
       end)
     end)
   end
@@ -255,7 +281,7 @@ defmodule Flagsmith.Engine do
         _segment_id,
         _identifier
       ) do
-    Enum.all?(traits, fn %Traits.Trait{
+    Enum.any?(traits, fn %Traits.Trait{
                            trait_key: t_key,
                            trait_value: t_value
                          } ->
@@ -270,7 +296,7 @@ defmodule Flagsmith.Engine do
           end
 
         _ ->
-          true
+          false
       end
     end)
   end

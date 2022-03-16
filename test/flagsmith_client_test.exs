@@ -269,11 +269,11 @@ defmodule Flagsmith.Client.Test do
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         assert_request(
           tesla_env,
-          body: nil,
+          body: "{\"identifier\":\"super1234324\"}",
           query: [],
           headers: [{@environment_header, config.environment_key}],
           url: Path.join([@api_url, @api_paths.identities]) <> "/",
-          method: :get
+          method: :post
         )
 
         {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_identity()}}
@@ -282,6 +282,7 @@ defmodule Flagsmith.Client.Test do
       assert {
                :ok,
                %Schemas.Flags{
+                 __configuration__: ^config,
                  flags: %{
                    "body_size" => %Schemas.Flag{
                      enabled: false,
@@ -313,6 +314,83 @@ defmodule Flagsmith.Client.Test do
 
       # we also assert that no poller was initiated by making sure there's no pid
       assert :undefined = Flagsmith.Client.Poller.whereis(config.environment_key)
+    end
+  end
+
+  describe "failure tests" do
+    test "get_environment", %{config: config} do
+      # set expectation for the http call with :error tuple
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:error, :noop}
+      end)
+
+      assert {:error, :noop} = Flagsmith.Client.get_environment(config)
+
+      # set expectation for the http call with :ok tuple, but 400 status
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:ok, %Tesla.Env{status: 400, body: "its_here"}}
+      end)
+
+      assert {:error, "its_here"} = Flagsmith.Client.get_environment(config)
+    end
+
+    test "get_flag with error", %{config: config} do
+      # set expectation for the http call with :error tuple
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:error, :noop}
+      end)
+
+      assert {:error, :noop} = Flagsmith.Client.get_flag(config, "some_flag")
+
+      # set expectation for the http call with :error tuple again
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: nil,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.environment]) <> "/",
+          method: :get
+        )
+
+        {:error, :noop}
+      end)
+
+      # now with default handler should return the flag instead of the error
+      new_config = %{
+        config
+        | default_flag_handler: fn name -> %Schemas.Flag{feature_name: name} end
+      }
+
+      assert %Schemas.Flag{feature_name: "some_flag"} =
+               Flagsmith.Client.get_flag(new_config, "some_flag")
     end
   end
 end

@@ -9,10 +9,10 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
           :type => :string | :decimal | :boolean
         }
 
+  @derive {Jason.Encoder, only: [:value, :type]}
+
   @enforce_keys [:value, :type]
   defstruct [:value, :type]
-
-  @derive Jason.Encoder
 
   @impl Ecto.Type
   def load(data), do: cast(data)
