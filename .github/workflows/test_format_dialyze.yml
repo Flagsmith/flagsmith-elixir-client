@@ -33,7 +33,7 @@ jobs:
     - name: Restore build artifacts
       uses: actions/cache@v2
       with:
-	path: _build
+        path: _build
         key: ${{ runner.os }}-build-${{ env.MIX_LOCK_HASH }}
         restore-keys: ${{ runner.os }}-build-
     - name: Check formatting
