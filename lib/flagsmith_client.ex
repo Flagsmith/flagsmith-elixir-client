@@ -20,15 +20,14 @@ defmodule Flagsmith.Client do
   def new(opts \\ []),
     do: Configuration.build(opts)
 
-  @doc false
   @spec http_client(Configuration.t()) :: Tesla.Client.t()
-  def http_client(%Configuration{
-        environment_key: environment_key,
-        api_url: api_url,
-        request_timeout_milliseconds: timeout,
-        custom_headers: custom_headers,
-        retries: retries
-      }) do
+  defp http_client(%Configuration{
+         environment_key: environment_key,
+         api_url: api_url,
+         request_timeout_milliseconds: timeout,
+         custom_headers: custom_headers,
+         retries: retries
+       }) do
     Tesla.client([
       base_url_middleware(api_url),
       auth_middleware(environment_key),
@@ -118,6 +117,7 @@ defmodule Flagsmith.Client do
   def build_flags(%Schemas.Environment{__configuration__: %Configuration{} = config} = env),
     do: build_flags(env, config)
 
+  @doc false
   def build_flags(%Schemas.Environment{} = env, %Configuration{} = config) do
     env
     |> extract_flags()

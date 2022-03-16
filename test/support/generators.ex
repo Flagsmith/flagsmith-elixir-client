@@ -3,19 +3,15 @@ defmodule Flagsmith.Engine.Test.Generators do
   alias Flagsmith.Schemas.Traits.Trait.Value
 
   def json_env() do
-    "{\"api_key\":\"cU3oztxgvRgZifpLepQJTX\",\"feature_states\":[{\"django_id\":72267,\"enabled\":false,\"feature\":{\"id\":13534,\"name\":\"header_size\",\"type\":\"MULTIVARIATE\"},\"feature_state_value\":\"24px\",\"featurestate_uuid\":\"79f20ade-c211-48fd-9be7-b759079526ca\",\"multivariate_feature_state_values\":[{\"id\":2915,\"multivariate_feature_option\":{\"id\":849,\"value\":\"34px\"},\"mv_fs_value_uuid\":\"d6ce29da-a737-45ec-a144-c95b1c64922b\",\"percentage_allocation\":80.0}]},{\"django_id\":72269,\"enabled\":false,\"feature\":{\"id\":13535,\"name\":\"body_size\",\"type\":\"STANDARD\"},\"feature_state_value\":\"18px\",\"featurestate_uuid\":\"a1073731-f657-4348-8a39-e2bf1b5127a6\",\"multivariate_feature_state_values\":[]},{\"django_id\":92461,\"enabled\":true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"{\\\"colour\\\": \\\"#ababab\\\"}\",\"featurestate_uuid\":\"07cd43fb-405a-4c7a-8409-208f1739cda2\",\"multivariate_feature_state_values\":[]},{\"django_id\":94235,\"enabled\":true,\"feature\":{\"id\":18382,\"name\":\"test_identity\",\"type\":\"STANDARD\"},\"feature_state_value\":\"very_yes\",\"featurestate_uuid\":\"cfcedb16-47ab-4a48-97c6-46bfd0c6df69\",\"multivariate_feature_state_values\":[]}],\"id\":11278,\"project\":{\"hide_disabled_flags\":false,\"id\":4732,\"name\":\"testing-api\",\"organisation\":{\"feature_analytics\":false,\"id\":4131,\"name\":\"Mr. Bojangles Inc\",\"persist_trait_data\":true,\"stop_serving_flags\":false},\"segments\":[{\"feature_states\":[{\"django_id\":95632,\"enabled\":false,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"\",\"featurestate_uuid\":\"31d12712-2505-4555-a4f1-ea433feac701\",\"multivariate_feature_state_values\":[]}],\"id\":5241,\"name\":\"test_segment\",\"rules\":[{\"conditions\":[],\"rules\":[{\"conditions\":[{\"operator\":\"EQUAL\",\"property_\":\"show_popup\",\"value\":\"false\"}],\"rules\":[],\"type\":\"ANY\"}],\"type\":\"ALL\"}]},{\"feature_states\":[{\"django_id\":95631,\"enabled\":false,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"\",\"featurestate_uuid\":\"82de5342-1a4d-438e-9a8f-6b6cb2c2404c\",\"multivariate_feature_state_values\":[]}],\"id\":5243,\"name\":\"test_perc\",\"rules\":[{\"conditions\":[],\"rules\":[{\"conditions\":[{\"operator\":\"PERCENTAGE_SPLIT\",\"property_\":\"\",\"value\":\"30\"}],\"rules\":[],\"type\":\"ANY\"}],\"type\":\"ALL\"}]}]}}"
+    "{\"api_key\":\"cU3oztxgvRgZifpLepQJTX\",\"feature_states\":[{\"django_id\":72267,\"enabled\":false,\"feature\":{\"id\":13534,\"name\":\"header_size\",\"type\":\"MULTIVARIATE\"},\"feature_state_value\":\"24px\",\"featurestate_uuid\":\"16c5a45c-1d9c-4f44-bebe-5b73d60f897d\",\"multivariate_feature_state_values\":[{\"id\":2915,\"multivariate_feature_option\":{\"id\":849,\"value\":\"34px\"},\"mv_fs_value_uuid\":\"448a7777-91cf-47b0-bf16-a4d566ef7745\",\"percentage_allocation\":80.0}]},{\"django_id\":72269,\"enabled\":false,\"feature\":{\"id\":13535,\"name\":\"body_size\",\"type\":\"STANDARD\"},\"feature_state_value\":\"18px\",\"featurestate_uuid\":\"c3c61a9a-f153-46b2-8e9e-dd80d6529201\",\"multivariate_feature_state_values\":[]},{\"django_id\":92461,\"enabled\": true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"{\\\"colour\\\": \\\"#ababab\\\"}\",\"featurestate_uuid\":\"d6bbf961-1752-4548-97d1-02d60cc1ab44\",\"multivariate_feature_state_values\":[]},{\"django_id\":94235,\"enabled\":true,\"feature\":{\"id\":18382,\"name\":\"test_identity\",\"type\":\"STANDARD\"},\"feature_state_value\":\"very_yes\",\"featurestate_uuid\":\"aa1a4512-b1c7-44d3-a263-c21676852a52\",\"multivariate_feature_state_values\":[]}],\"id\":11278,\"project\":{\"hide_disabled_flags\":false,\"id\":4732,\"name\":\"testing-api\",\"organisation\":{\"feature_analytics\":false,\"id\":4131,\"name\":\"Mr. Bojangles Inc\",\"persist_trait_data\":true,\"stop_serving_flags\":false},\"segments\":[{\"feature_states\":[{\"django_id\":95632,\"enabled\":true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"\",\"featurestate_uuid\":\"3b58d149-fdb3-4815-b537-6583291523dd\",\"multivariate_feature_state_values\":[]}],\"id\":5241,\"name\":\"test_segment\",\"rules\":[{\"conditions\":[],\"rules\":[{\"conditions\":[{\"operator\":\"EQUAL\",\"property_\":\"show_popup\",\"value\":\"false\"}],\"rules\":[],\"type\":\"ANY\"}],\"type\":\"ALL\"}]},{\"feature_states\":[{\"django_id\":95631,\"enabled\":true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"\",\"featurestate_uuid\":\"adb486aa-563d-4b1d-9f72-bf5b210bf94f\",\"multivariate_feature_state_values\":[]}],\"id\":5243,\"name\":\"test_perc\",\"rules\":[{\"conditions\":[],\"rules\":[{\"conditions\":[{\"operator\":\"PERCENTAGE_SPLIT\",\"property_\":\"\",\"value\":\"50\"}],\"rules\":[],\"type\":\"ANY\"}],\"type\":\"ALL\"}]}]}}"
   end
 
   def map_env(), do: Jason.decode!(json_env())
 
   def full_env() do
     %Environment{
-      id: 11278,
-      api_key: "cU3oztxgvRgZifpLepQJTX",
       amplitude_config: nil,
-      segment_config: nil,
-      heap_config: nil,
-      mixpanel_config: nil,
+      api_key: "cU3oztxgvRgZifpLepQJTX",
       feature_states: [
         %Environment.FeatureState{
           django_id: 72267,
@@ -26,7 +22,7 @@ defmodule Flagsmith.Engine.Test.Generators do
             type: "MULTIVARIATE"
           },
           feature_state_value: "24px",
-          featurestate_uuid: "d8cce15f-cf87-495a-902d-f989345d3e0c",
+          featurestate_uuid: "16c5a45c-1d9c-4f44-bebe-5b73d60f897d",
           multivariate_feature_state_values: [
             %Environment.MultivariateFeatureStateValue{
               id: 2915,
@@ -34,7 +30,7 @@ defmodule Flagsmith.Engine.Test.Generators do
                 id: 849,
                 value: "34px"
               },
-              mv_fs_value_uuid: "4086b049-4bfe-459a-9282-ced14ebd26ad",
+              mv_fs_value_uuid: "448a7777-91cf-47b0-bf16-a4d566ef7745",
               percentage_allocation: 80.0
             }
           ]
@@ -48,48 +44,64 @@ defmodule Flagsmith.Engine.Test.Generators do
             type: "STANDARD"
           },
           feature_state_value: "18px",
-          featurestate_uuid: "15849151-6fce-4140-8972-061126767cd7",
+          featurestate_uuid: "c3c61a9a-f153-46b2-8e9e-dd80d6529201",
           multivariate_feature_state_values: []
         },
         %Environment.FeatureState{
           django_id: 92461,
-          enabled: false,
+          enabled: true,
           feature: %Environment.Feature{
             id: 17985,
             name: "secret_button",
             type: "STANDARD"
           },
           feature_state_value: "{\"colour\": \"#ababab\"}",
-          featurestate_uuid: "09ac9448-5053-4429-bd0d-7738e42dbfaf",
+          featurestate_uuid: "d6bbf961-1752-4548-97d1-02d60cc1ab44",
           multivariate_feature_state_values: []
         },
         %Environment.FeatureState{
           django_id: 94235,
-          enabled: false,
+          enabled: true,
           feature: %Environment.Feature{
             id: 18382,
             name: "test_identity",
             type: "STANDARD"
           },
           feature_state_value: "very_yes",
-          featurestate_uuid: "a2c61335-2249-4c1f-818d-fc0b6cf7552a",
+          featurestate_uuid: "aa1a4512-b1c7-44d3-a263-c21676852a52",
           multivariate_feature_state_values: []
         }
       ],
+      heap_config: nil,
+      id: 11278,
+      mixpanel_config: nil,
       project: %Environment.Project{
+        hide_disabled_flags: false,
         id: 4732,
         name: "testing-api",
-        hide_disabled_flags: false,
         organisation: %Environment.Organisation{
+          feature_analytics: false,
           id: 4131,
           name: "Mr. Bojangles Inc",
-          feature_analytics: false,
           persist_trait_data: true,
           stop_serving_flags: false
         },
         segments: [
           %Segments.Segment{
-            feature_states: [],
+            feature_states: [
+              %Environment.FeatureState{
+                django_id: 95632,
+                enabled: true,
+                feature: %Environment.Feature{
+                  id: 17985,
+                  name: "secret_button",
+                  type: "STANDARD"
+                },
+                feature_state_value: nil,
+                featurestate_uuid: "3b58d149-fdb3-4815-b537-6583291523dd",
+                multivariate_feature_state_values: []
+              }
+            ],
             id: 5241,
             name: "test_segment",
             rules: [
@@ -113,7 +125,20 @@ defmodule Flagsmith.Engine.Test.Generators do
             ]
           },
           %Segments.Segment{
-            feature_states: [],
+            feature_states: [
+              %Environment.FeatureState{
+                django_id: 95631,
+                enabled: true,
+                feature: %Environment.Feature{
+                  id: 17985,
+                  name: "secret_button",
+                  type: "STANDARD"
+                },
+                feature_state_value: nil,
+                featurestate_uuid: "adb486aa-563d-4b1d-9f72-bf5b210bf94f",
+                multivariate_feature_state_values: []
+              }
+            ],
             id: 5243,
             name: "test_perc",
             rules: [
@@ -125,7 +150,7 @@ defmodule Flagsmith.Engine.Test.Generators do
                       %Segments.Segment.Condition{
                         operator: :PERCENTAGE_SPLIT,
                         property_: nil,
-                        value: "30"
+                        value: "50"
                       }
                     ],
                     rules: [],
@@ -137,7 +162,8 @@ defmodule Flagsmith.Engine.Test.Generators do
             ]
           }
         ]
-      }
+      },
+      segment_config: nil
     }
   end
 

@@ -17,4 +17,27 @@ defmodule Flagsmith.Test.Helpers do
              end)
     end)
   end
+
+  def wait_until(fun, timer_max_milliseconds \\ 100) do
+    spawn_wait_loop(self(), fun)
+
+    receive do
+      :wait_ok -> true
+    after
+      timer_max_milliseconds ->
+        false
+    end
+  end
+
+  defp spawn_wait_loop(pid, fun) do
+    Process.spawn(
+      fn ->
+        case fun.() do
+          false -> spawn_wait_loop(pid, fun)
+          true -> send(pid, :wait_ok)
+        end
+      end,
+      []
+    )
+  end
 end

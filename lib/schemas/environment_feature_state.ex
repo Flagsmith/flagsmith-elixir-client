@@ -46,4 +46,24 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
   end
 
   def from_response(element), do: element
+
+  @doc false
+  def get_hashing_id(%__MODULE__{django_id: nil, featurestate_uuid: id}),
+    do: id
+
+  def get_hashing_id(%__MODULE__{django_id: django_id}),
+    do: django_id
+
+  def get_hashing_id(%{id: id}),
+    do: id
+
+  @doc false
+  def extract_multivariate_value(%Environment.MultivariateFeatureStateValue{
+        multivariate_feature_option: %Environment.MultivariateFeatureOption{
+          value: value
+        }
+      }),
+      do: {:ok, value}
+
+  def extract_multivariate_value(_), do: {:error, :invalid_multivariate}
 end
