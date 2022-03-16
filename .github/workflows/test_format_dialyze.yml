@@ -25,7 +25,7 @@ jobs:
     - name: Restore dependencies cache
       uses: actions/cache@v2
       with:
-        path: deps
+	path: deps
         key: ${{ runner.os }}-deps-${{ env.MIX_LOCK_HASH }}
         restore-keys: ${{ runner.os }}-mix-
     - name: Install dependencies
