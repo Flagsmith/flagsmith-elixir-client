@@ -9,6 +9,11 @@ defmodule FlagsmithEngine.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      # DIALYZER 
+      dialyzer: [
+        plt_file: {:no_warn, "priv/plts/#{Mix.env()}/dialyzer.plt"}
+      ],
+      # DOCUMENTATION DETAILS
       source_url: "https://github.com/Flagsmith/flagsmith-elixir-client",
       homepage_url: "https://hexdocs.pm/flagsmith_engine/readme.html",
       docs: [
