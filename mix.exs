@@ -26,35 +26,35 @@ defmodule FlagsmithEngine.MixProject do
           Flagsmith.Schemas.Traits,
           Flagsmith.Schemas.Types
         ],
-	groups_for_modules: [
-	  "Client": [
-	    Flagsmith.Client,
-	    Flagsmith.Configuration,
-	    Flagsmith.Supervisor
-	  ],
-	  "Schemas Environment": [
-	    Flagsmith.Schemas.Environment,
-	    Flagsmith.Schemas.Environment.FeatureState,
-	    Flagsmith.Schemas.Environment.Feature,
-	    Flagsmith.Schemas.Environment.Project,
-	    Flagsmith.Schemas.Environment.Organisation,
-	    Flagsmith.Schemas.Environment.Integration,
-	    Flagsmith.Schemas.Environment.MultivariateFeatureOption,
-	    Flagsmith.Schemas.Environment.MultivariateFeatureStateValue,
-	    Flagsmith.Schemas.Features.FeatureState,
-	    Flagsmith.Schemas.Features.Feature,
-	    Flagsmith.Schemas.Flags,
-	    Flagsmith.Schemas.Flag,
-	    Flagsmith.Schemas.Identity,
-	    Flagsmith.Schemas.Segments.Segment,
-	    Flagsmith.Schemas.Segments.Rule,
-	    Flagsmith.Schemas.Segments.Type,
-	    Flagsmith.Schemas.Types.Operator,
-	    Flagsmith.Schemas.Types.Segment.Type,
-	    Flagsmith.Schemas.Traits.Trait,
-	    Flagsmith.Schemas.Traits.Trait.Value
-	  ]
-	]
+        groups_for_modules: [
+          Client: [
+            Flagsmith.Client,
+            Flagsmith.Configuration,
+            Flagsmith.Supervisor
+          ],
+          "Schemas Environment": [
+            Flagsmith.Schemas.Environment,
+            Flagsmith.Schemas.Environment.FeatureState,
+            Flagsmith.Schemas.Environment.Feature,
+            Flagsmith.Schemas.Environment.Project,
+            Flagsmith.Schemas.Environment.Organisation,
+            Flagsmith.Schemas.Environment.Integration,
+            Flagsmith.Schemas.Environment.MultivariateFeatureOption,
+            Flagsmith.Schemas.Environment.MultivariateFeatureStateValue,
+            Flagsmith.Schemas.Features.FeatureState,
+            Flagsmith.Schemas.Features.Feature,
+            Flagsmith.Schemas.Flags,
+            Flagsmith.Schemas.Flag,
+            Flagsmith.Schemas.Identity,
+            Flagsmith.Schemas.Segments.Segment,
+            Flagsmith.Schemas.Segments.Rule,
+            Flagsmith.Schemas.Segments.Type,
+            Flagsmith.Schemas.Types.Operator,
+            Flagsmith.Schemas.Types.Segment.Type,
+            Flagsmith.Schemas.Traits.Trait,
+            Flagsmith.Schemas.Traits.Trait.Value
+          ]
+        ]
       ],
       description:
         "Elixir Engine and Client for Flagsmith. Ship features with confidence using feature flags.",

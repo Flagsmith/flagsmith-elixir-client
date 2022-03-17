@@ -5,7 +5,7 @@ Documentation: [https://hexdocs.pm/flagsmith_engine](https://hexdocs.pm/flagsmit
 <div align="center">
      <a href="#installation">Installation</a><span>&nbsp; |</span>
      <a href="#usage">Usage</a><span>&nbsp; |</span>
-     <a href="#analytics_local_evaluation">Analytics / Local Evaluation</a><span>&nbsp; |</span>
+     <a href="#analytics--local-evaluation">Analytics / Local Evaluation</a><span>&nbsp; |</span>
      <a href="#examples">Examples</a><span>&nbsp; |</span>
      <a href="#options">Options</a><span>&nbsp; |</span>
      <a href="#internals">Internals</a><span>&nbsp; |</span>
@@ -156,7 +156,7 @@ When using local evaluation with identity based requests the provided traits wil
 "true" = Flagsmith.Client.get_feature_value(flags, "show_subscription")
 ```
 
-If you don't provide the trait, even if on the Flagsmith platform the identity has that trait, you will get the flags as if he didn't:
+If you don't provide the trait, even if on the Flagsmith platform the identity has that trait, you will get the flags as if it didn't:
 
 ```elixir
 
@@ -173,7 +173,7 @@ When using normal API calls the same call would update the given trait and then 
 "true" = Flagsmith.Client.get_feature_value(flags, "show_subscription")
 ```
 
-And obviously, if the identity has that trait and you do the regular API call with no local evaluation, you'll get the flags as expected:
+And obviously, if the identity has that trait and you do the regular API call with no local evaluation, and without passing any trait in the query, you'll get the flags as expected from the Flagsmith platform:
 
 ```elixir
 {:ok, flags} = Flagsmith.Client.get_identity_flags([environment_key: "MY_SDK_KEY"], "user-a", [])
@@ -185,7 +185,7 @@ And obviously, if the identity has that trait and you do the regular API call wi
 
 - `environment_key` -> a server side sdk key (required)
 
-- `api_url` -> the base url to which requests against the Flagsmith API will be made (defaults to: "https://api.flagsmith.com/api/v1>")
+- `api_url` -> the base url to which requests against the Flagsmith API will be made (defaults to: `"https://api.flagsmith.com/api/v1"`)
 
 - `default_flag_handler` -> a 1 arity function that receives a feature name (String.t()) and is called when calling feature related functions and the given feature isn't found or the API call fails -> defaults to returning `:not_found`
 
