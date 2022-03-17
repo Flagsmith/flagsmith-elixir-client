@@ -4,7 +4,7 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "0.1.10",
+      version: "0.1.11",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -32,7 +32,7 @@ defmodule FlagsmithEngine.MixProject do
             Flagsmith.Configuration,
             Flagsmith.Supervisor
           ],
-          "Schemas Environment": [
+          Schemas: [
             Flagsmith.Schemas.Environment,
             Flagsmith.Schemas.Environment.FeatureState,
             Flagsmith.Schemas.Environment.Feature,
@@ -47,10 +47,10 @@ defmodule FlagsmithEngine.MixProject do
             Flagsmith.Schemas.Flag,
             Flagsmith.Schemas.Identity,
             Flagsmith.Schemas.Segments.Segment,
-            Flagsmith.Schemas.Segments.Rule,
-            Flagsmith.Schemas.Segments.Type,
-            Flagsmith.Schemas.Types.Operator,
+            Flagsmith.Schemas.Segments.Segment.Condition,
+            Flagsmith.Schemas.Segments.Segment.Rule,
             Flagsmith.Schemas.Types.Segment.Type,
+            Flagsmith.Schemas.Types.Operator,
             Flagsmith.Schemas.Traits.Trait,
             Flagsmith.Schemas.Traits.Trait.Value
           ]
