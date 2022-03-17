@@ -86,7 +86,7 @@ defmodule Flagsmith.Client do
   started yet, which requires you to be running the `Flagsmith.Supervisor`.
   """
   @spec get_environment_flags(config_or_env()) ::
-          {:ok, %{String.t() => Schemas.Flag.t()}} | {:error, term()}
+          {:ok, Schemas.Flags.t()} | {:error, term()}
   def get_environment_flags(configuration_or_env_or_opts \\ [])
 
   def get_environment_flags(%Configuration{enable_local_evaluation: local?} = config) do
@@ -154,7 +154,7 @@ defmodule Flagsmith.Client do
           String.t(),
           list(map() | Schemas.Traits.Trait.t())
         ) ::
-          {:ok, %{String.t() => Schemas.Flag.t()}} | {:error, term()}
+          {:ok, Schemas.Flags.t()} | {:error, term()}
   def get_identity_flags(configuration_or_opts \\ [], identifier, traits)
 
   def get_identity_flags(
