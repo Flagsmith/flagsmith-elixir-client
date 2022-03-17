@@ -4,7 +4,7 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "0.1.7",
+      version: "0.1.8",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -30,7 +30,7 @@ defmodule FlagsmithEngine.MixProject do
       description:
         "Elixir Engine and Client for Flagsmith. Ship features with confidence using feature flags.",
       package: [
-        exclude_patterns: [~r/.*~$/, ~r/#.*#$/],
+        exclude_patterns: [~r/.*~$/, ~r/#.*#$/, ~r/priv\/plts/],
         licenses: ["MIT"],
         links: %{
           "github/readme" => "https://github.com/Flagsmith/flagsmith-elixir-client"

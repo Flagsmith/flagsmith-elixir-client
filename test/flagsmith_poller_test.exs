@@ -330,6 +330,10 @@ defmodule Flagsmith.Client.Poller.Test do
     end
 
     test "get_identity_flags", %{poller_pid: pid, config: config} do
+      # the default environment flags
+      # we just fetch them and assert in order to make sure that the next following
+      # assertions are by nature of passing identity/traits and not because they
+      # were the environment values themselves
       assert {:ok,
               %Flagsmith.Schemas.Flags{
                 __configuration__: %Flagsmith.Configuration{},
@@ -386,8 +390,6 @@ defmodule Flagsmith.Client.Poller.Test do
                   }
                 }
               }} = Flagsmith.Client.get_identity_flags(config, "testing", [])
-
-      assert ^pid = Flagsmith.Client.Poller.whereis(config.environment_key)
 
       # a different id that hashes both to higher than 80% in the multivariate part
       # and higher than 50% on the PERCENTAGE_SPLIT segment eval
@@ -453,6 +455,9 @@ defmodule Flagsmith.Client.Poller.Test do
                Flagsmith.Client.get_identity_flags(config, "24", [
                  %{trait_key: "show_popup", trait_value: false}
                ])
+
+      # sanity check that nowhere did the poller process exit/crash
+      assert ^pid = Flagsmith.Client.Poller.whereis(config.environment_key)
     end
   end
 
