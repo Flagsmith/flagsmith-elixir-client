@@ -1,6 +1,18 @@
 defmodule Flagsmith.Schemas.Traits.Trait.Value do
   @behaviour Ecto.Type
 
+  @moduledoc """
+  Ecto type to aid casting values returned by the Flagsmith API that need to be
+  compared. Since those values are weakly typed in different places and they need
+  to be compared, it's necessary to be able to convert and assign a type to a value
+  in order to when comparing that value with another one, the other one can be cast
+  to the same type.
+
+  This ecto type works as a struct containing the converted value in its correctly 
+  typed format and a field `:type` containing the corresponding type, so that it's
+  easier to then cast any other stringed type into the same format.
+  """
+
   @impl Ecto.Type
   def type(), do: :map
 

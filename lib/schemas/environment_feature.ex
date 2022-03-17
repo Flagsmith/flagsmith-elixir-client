@@ -3,8 +3,8 @@ defmodule Flagsmith.Schemas.Environment.Feature do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a Flagsmith environment feature definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith feature definition as represented in a
+  full environment FeatureState.
   """
 
   @primary_key {:id, :id, autogenerate: false}
@@ -13,6 +13,7 @@ defmodule Flagsmith.Schemas.Environment.Feature do
     field(:type, :string)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -20,6 +21,7 @@ defmodule Flagsmith.Schemas.Environment.Feature do
     |> cast(params, [:id, :name, :type])
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

@@ -3,8 +3,8 @@ defmodule Flagsmith.Schemas.Features.Feature do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a Flagsmith feature definition and helpers to cast
-  responses from the api.
+  Ecto schema representing a Flagsmith base feature definition. This differs from the
+  `t:Flagsmith.Schemas.Environment.Feature.t/0` in the fields that make it up.
   """
 
   @primary_key false
@@ -18,6 +18,7 @@ defmodule Flagsmith.Schemas.Features.Feature do
     field(:type, :string)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do

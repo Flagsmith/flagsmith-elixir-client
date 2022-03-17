@@ -3,8 +3,7 @@ defmodule Flagsmith.Schemas.Environment.MultivariateFeatureOption do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a Flagsmith environment feature definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith multivariate feature option.
   """
 
   @primary_key {:id, :id, autogenerate: false}
@@ -12,6 +11,7 @@ defmodule Flagsmith.Schemas.Environment.MultivariateFeatureOption do
     field(:value, :string)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -19,6 +19,7 @@ defmodule Flagsmith.Schemas.Environment.MultivariateFeatureOption do
     |> cast(params, [:id, :value])
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

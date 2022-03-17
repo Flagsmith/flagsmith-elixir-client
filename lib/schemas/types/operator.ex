@@ -1,4 +1,9 @@
 defmodule Flagsmith.Schemas.Types.Operator do
+  @moduledoc """
+  Ecto Type representing an atom based enum mapping to the possible condition
+  operators in Flagsmith.
+  """
+
   use TypedEnum,
     values: [
       :NOT_CONTAINS,

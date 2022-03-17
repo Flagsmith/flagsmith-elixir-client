@@ -3,8 +3,7 @@ defmodule Flagsmith.Schemas.Environment do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a Flagsmith Environment definition and helpers to cast
-  responses from the api.
+  Ecto schema representing a Flagsmith Environment definition.
   """
 
   @primary_key {:id, :id, autogenerate: false}
@@ -20,6 +19,7 @@ defmodule Flagsmith.Schemas.Environment do
     field(:__configuration__, :map)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -33,6 +33,7 @@ defmodule Flagsmith.Schemas.Environment do
     |> cast_embed(:heap_config)
   end
 
+  @doc false
   @spec cast(map()) :: {:ok, __MODULE__.t()} | {:error, Ecto.Changeset.t()}
   def cast(json_map) do
     json_map
@@ -40,6 +41,7 @@ defmodule Flagsmith.Schemas.Environment do
     |> apply_action(:insert)
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element
@@ -57,6 +59,7 @@ defmodule Flagsmith.Schemas.Environment do
 
   def from_response(element), do: element
 
+  @doc false
   def add_client_config(%__MODULE__{} = struct, %Flagsmith.Configuration{} = config),
     do: %{struct | __configuration__: config}
 end
