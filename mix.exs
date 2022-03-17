@@ -4,7 +4,7 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "0.1.9",
+      version: "0.1.11",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -25,6 +25,35 @@ defmodule FlagsmithEngine.MixProject do
           Flagsmith.Schemas.Segments,
           Flagsmith.Schemas.Traits,
           Flagsmith.Schemas.Types
+        ],
+        groups_for_modules: [
+          Client: [
+            Flagsmith.Client,
+            Flagsmith.Configuration,
+            Flagsmith.Supervisor
+          ],
+          Schemas: [
+            Flagsmith.Schemas.Environment,
+            Flagsmith.Schemas.Environment.FeatureState,
+            Flagsmith.Schemas.Environment.Feature,
+            Flagsmith.Schemas.Environment.Project,
+            Flagsmith.Schemas.Environment.Organisation,
+            Flagsmith.Schemas.Environment.Integration,
+            Flagsmith.Schemas.Environment.MultivariateFeatureOption,
+            Flagsmith.Schemas.Environment.MultivariateFeatureStateValue,
+            Flagsmith.Schemas.Features.FeatureState,
+            Flagsmith.Schemas.Features.Feature,
+            Flagsmith.Schemas.Flags,
+            Flagsmith.Schemas.Flag,
+            Flagsmith.Schemas.Identity,
+            Flagsmith.Schemas.Segments.Segment,
+            Flagsmith.Schemas.Segments.Segment.Condition,
+            Flagsmith.Schemas.Segments.Segment.Rule,
+            Flagsmith.Schemas.Types.Segment.Type,
+            Flagsmith.Schemas.Types.Operator,
+            Flagsmith.Schemas.Traits.Trait,
+            Flagsmith.Schemas.Traits.Trait.Value
+          ]
         ]
       ],
       description:

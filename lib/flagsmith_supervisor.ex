@@ -6,6 +6,31 @@ defmodule Flagsmith.Supervisor do
   Implements the necessary supervision tree to ensure Poller and Analytics processors
   can be started, accessed and supervised correctly.
 
+  To use it either add it to your application supervision tree:
+
+  ```elixir
+  defmodule YourApp.Application do
+
+    # ...
+
+    def start(_type, _args) do
+      children = [
+        Flagsmith.Supervisor,
+        # ... other stuff
+      ]
+
+      opts = [strategy: :one_for_one, name: YourApp.Supervisor]
+      Supervisor.start_link(children, opts)
+    end
+
+    # ...
+  end
+  ```
+
+  Or start it somewhere:
+
+  `{:ok, pid} = Flagsmith.Supervisor.start_link()`
+
   This supervisor starts 3 additional processes, a local `Registry` and two dynamic
   supervisors responsible for starting Pollers and Analytics processes (usually
   a single one, but since they are isolated by sdk key used, if you use multiple
