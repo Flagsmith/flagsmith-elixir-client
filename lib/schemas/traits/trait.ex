@@ -5,8 +5,7 @@ defmodule Flagsmith.Schemas.Traits.Trait do
   @type from_types :: __MODULE__.t() | map() | list(__MODULE__.t() | map())
 
   @moduledoc """
-  Ecto schema representing a Flagsmith trait definition and helpers to cast responses
-  from the api.
+  Ecto schema representing a Flagsmith trait definition.
   """
 
   @derive {Jason.Encoder, only: [:trait_key, :trait_value]}
@@ -17,6 +16,7 @@ defmodule Flagsmith.Schemas.Traits.Trait do
     field(:trait_value, __MODULE__.Value)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -25,6 +25,7 @@ defmodule Flagsmith.Schemas.Traits.Trait do
     |> validate_required([:trait_value, :trait_key])
   end
 
+  @doc false
   @spec extract_trait_value(String.t(), list(__MODULE__.t())) ::
           {:ok, term()} | {:error, :not_found}
   def extract_trait_value(key, traits) do
@@ -34,6 +35,7 @@ defmodule Flagsmith.Schemas.Traits.Trait do
     end
   end
 
+  @doc false
   @spec from(from_types()) :: list(__MODULE__.t()) | __MODULE__.t()
   def from(traits) when is_list(traits),
     do: Enum.map(traits, &from/1)
@@ -47,6 +49,7 @@ defmodule Flagsmith.Schemas.Traits.Trait do
     |> apply_changes()
   end
 
+  @doc false
   @spec into_update_map(list(__MODULE__.t())) :: map()
   def into_update_map(traits) when is_list(traits) do
     traits

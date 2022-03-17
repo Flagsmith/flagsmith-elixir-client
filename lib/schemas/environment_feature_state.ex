@@ -5,8 +5,8 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
   alias Flagsmith.Schemas.Environment
 
   @moduledoc """
-  Ecto schema representing a Flagsmith environment feature definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith full feature state definition (as represented 
+  in the environment definition).
   """
 
   @primary_key {:featurestate_uuid, :binary_id, autogenerate: false}
@@ -21,6 +21,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     embeds_many(:multivariate_feature_state_values, Environment.MultivariateFeatureStateValue)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -30,6 +31,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     |> cast_embed(:multivariate_feature_state_values)
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

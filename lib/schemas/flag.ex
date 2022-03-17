@@ -4,8 +4,7 @@ defmodule Flagsmith.Schemas.Flag do
   alias Flagsmith.Schemas.{Environment, Features}
 
   @moduledoc """
-  Ecto schema representing a Flagsmith environment feature definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith Flag definition.
   """
 
   @primary_key {:feature_id, :id, autogenerate: false}
@@ -15,6 +14,7 @@ defmodule Flagsmith.Schemas.Flag do
     field(:value, :string)
   end
 
+  @doc false
   @spec from(Environment.FeatureState.t() | Features.FeatureState.t()) :: __MODULE__.t()
   def from(%Environment.FeatureState{
         enabled: enabled,

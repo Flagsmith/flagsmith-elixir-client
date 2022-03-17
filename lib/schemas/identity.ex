@@ -3,8 +3,8 @@ defmodule Flagsmith.Schemas.Identity do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing an object containing Flagsmith's flags and traits associated
-  with an identity and helpers to cast responses from the api.
+  Ecto schema representing an object containing a Flagsmith identity with
+  flags and traits.
   """
 
   @primary_key false
@@ -15,6 +15,7 @@ defmodule Flagsmith.Schemas.Identity do
     embeds_many(:traits, Flagsmith.Schemas.Traits.Trait)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -38,6 +39,7 @@ defmodule Flagsmith.Schemas.Identity do
       traits: Flagsmith.Schemas.Traits.Trait.from(traits)
     }
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

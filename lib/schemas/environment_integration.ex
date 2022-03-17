@@ -3,8 +3,7 @@ defmodule Flagsmith.Schemas.Environment.Integration do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a Flagsmith organisation definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith integration definition.
   """
 
   @primary_key false
@@ -13,6 +12,7 @@ defmodule Flagsmith.Schemas.Environment.Integration do
     field(:base_url, :string)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -20,6 +20,7 @@ defmodule Flagsmith.Schemas.Environment.Integration do
     |> cast(params, [:api_key, :base_url])
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

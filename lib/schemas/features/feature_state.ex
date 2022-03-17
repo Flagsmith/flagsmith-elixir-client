@@ -3,8 +3,9 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a full Flagsmith feature definition and helpers to cast
-  responses from the api.
+  Ecto schema representing a Flagsmith base feature state definition. This differs
+  from the `t:Flagsmith.Schemas.Environment.FeatureState.t/0` in the fields that make
+  it up.
   """
 
   @primary_key false
@@ -19,6 +20,7 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
     embeds_one(:feature, Flagsmith.Schemas.Features.Feature)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -34,6 +36,7 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
     |> cast_embed(:feature, required: true)
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

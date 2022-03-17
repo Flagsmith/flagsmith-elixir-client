@@ -5,8 +5,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Rule do
   alias Flagsmith.Schemas.Segments.Segment
 
   @moduledoc """
-  Ecto schema representing a Flagsmith organisation definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith Segment Rule definition.
   """
 
   @primary_key false
@@ -16,6 +15,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Rule do
     embeds_many(:conditions, Segment.Condition)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -25,6 +25,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Rule do
     |> cast_embed(:conditions)
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

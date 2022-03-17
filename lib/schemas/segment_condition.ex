@@ -3,8 +3,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Condition do
   import Ecto.Changeset
 
   @moduledoc """
-  Ecto schema representing a Flagsmith Segment Condition definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith Segment Condition definition.
   """
 
   @primary_key false
@@ -14,6 +13,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Condition do
     field(:property_, :string)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -21,6 +21,7 @@ defmodule Flagsmith.Schemas.Segments.Segment.Condition do
     |> cast(params, [:operator, :value, :property_])
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element

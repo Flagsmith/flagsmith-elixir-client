@@ -5,8 +5,7 @@ defmodule Flagsmith.Schemas.Environment.Project do
   alias Flagsmith.Schemas.{Environment, Segments}
 
   @moduledoc """
-  Ecto schema representing a Flagsmith environment feature definition and helpers
-  to cast responses from the api.
+  Ecto schema representing a Flagsmith environment project definition.
   """
 
   @primary_key {:id, :id, autogenerate: false}
@@ -17,6 +16,7 @@ defmodule Flagsmith.Schemas.Environment.Project do
     embeds_many(:segments, Segments.Segment)
   end
 
+  @doc false
   @spec changeset(map()) :: Ecto.Changeset.t()
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
@@ -26,6 +26,7 @@ defmodule Flagsmith.Schemas.Environment.Project do
     |> cast_embed(:segments)
   end
 
+  @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
     element
