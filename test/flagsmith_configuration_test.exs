@@ -1,5 +1,6 @@
 defmodule Flagsmith.Configuration.Test do
   use ExUnit.Case, async: false
+  import ExUnit.CaptureLog
 
   # here we don't fetch it from the config, the purpose is to check if the
   # defaults and functions there use these, so in case some change happens
@@ -91,5 +92,57 @@ defmodule Flagsmith.Configuration.Test do
     assert default_handler.(true)
 
     Application.delete_env(:flagsmith_engine, :configuration)
+  end
+
+  test "configuration validations" do
+    assert_raise RuntimeError, ~r/environment_key needs to be/, fn ->
+      Configuration.build(environment_key: true)
+    end
+
+    assert_raise RuntimeError, ~r/^api_url needs to be/, fn ->
+      Configuration.build(environment_key: "A", api_url: 0)
+    end
+
+    assert_raise RuntimeError, ~r/^default_flag_handler needs/, fn ->
+      Configuration.build(environment_key: "A", default_flag_handler: "oi")
+    end
+
+    Enum.each([0, [{1, 2, 3}], %{wrong: 1}], fn val ->
+      assert_raise RuntimeError, ~r/^custom_headers needs to be/, fn ->
+        Configuration.build(environment_key: "A", custom_headers: val)
+      end
+    end)
+
+    Enum.each([0, 1000, "oi"], fn val ->
+      assert_raise RuntimeError, ~r/^request_timeout_milliseconds needs to be/, fn ->
+        Configuration.build(environment_key: "A", request_timeout_milliseconds: val)
+      end
+    end)
+
+    assert_raise RuntimeError, ~r/^enable_local_evaluation needs to be/, fn ->
+      Configuration.build(environment_key: "A", enable_local_evaluation: "true")
+    end
+
+    Enum.each([0, "oi"], fn val ->
+      assert_raise RuntimeError, ~r/^environment_refresh_interval_milliseconds needs to be/, fn ->
+        Configuration.build(environment_key: "A", environment_refresh_interval_milliseconds: val)
+      end
+    end)
+
+    Enum.each([-1, "oi"], fn val ->
+      assert_raise RuntimeError, ~r/^retries needs to be/, fn ->
+        Configuration.build(environment_key: "A", retries: val)
+      end
+    end)
+
+    assert_raise RuntimeError, ~r/^enable_analytics needs to be/, fn ->
+      Configuration.build(environment_key: "A", enable_analytics: "false")
+    end
+  end
+
+  test "logs warning if unknown opt is passed" do
+    assert capture_log([level: :warn], fn ->
+             Configuration.build(environment_key: "A", api_url_typo: "something")
+           end) =~ "unknown option :api_url_typo passed as configuration to Flagsmith.Client"
   end
 end
