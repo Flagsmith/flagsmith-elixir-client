@@ -459,6 +459,48 @@ defmodule Flagsmith.Client.Poller.Test do
       # sanity check that nowhere did the poller process exit/crash
       assert ^pid = Flagsmith.Client.Poller.whereis(config.environment_key)
     end
+
+    test "when a call to a poller that was started with a given configuration is given another configuration replace the __configuration__ in the returned environment",
+         %{config: config} do
+      new_config = Map.put(config, :enable_analytics, true)
+
+      assert {:ok,
+              %Flagsmith.Schemas.Environment{
+                __configuration__: %Flagsmith.Configuration{enable_analytics: true}
+              }} = Flagsmith.Client.get_environment(new_config)
+    end
+
+    test "when a call to a poller that was started with a given configuration is given another configuration replace the __configuration__ in the returned flags",
+         %{config: config} do
+      new_config = Map.put(config, :enable_analytics, true)
+
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{enable_analytics: true},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "24px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: "{\"colour\": \"#ababab\"}"
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "test_identity",
+                    value: "very_yes"
+                  }
+                }
+              }} = Flagsmith.Client.get_environment_flags(new_config)
+    end
   end
 
   describe "api call errors" do
