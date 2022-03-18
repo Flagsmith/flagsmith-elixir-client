@@ -27,17 +27,17 @@ defmodule Flagsmith.Client.Poller do
 
   @spec get_environment(Configuration.t()) :: {:ok, Schemas.Environment.t()} | {:error, term()}
   def get_environment(%Configuration{} = config),
-    do: interact(config, :get_environment)
+    do: interact(config, :get_environment) |> replace_config(config)
 
   @spec get_environment_flags(Configuration.t()) ::
           {:ok, map()} | {:error, term()}
   def get_environment_flags(%Configuration{} = config),
-    do: interact(config, :get_flags)
+    do: interact(config, :get_flags) |> replace_config(config)
 
   @spec get_identity_flags(Configuration.t(), identity_id(), list(map()) | map) ::
           {:ok, Schemas.Identity.t()} | {:error, term()}
   def get_identity_flags(%Configuration{} = config, identifier, traits),
-    do: interact(config, {:get_identity_flags, identifier, traits})
+    do: interact(config, {:get_identity_flags, identifier, traits}) |> replace_config(config)
 
   @spec statem_id(environment_key()) :: poller_identifier()
   def statem_id(environment_key), do: {__MODULE__, environment_key}
@@ -259,4 +259,25 @@ defmodule Flagsmith.Client.Poller do
 
     send(pid, {:refresh, self(), resp})
   end
+
+  # this is so that, if for instance you start a client with enable local evaluation
+  # true and analytics false, and then do a request we would pass the environment
+  # or flags with the configuration that was present when starting the poller
+  # but it might happen that you want for instance, to track analytics in this
+  # particular request, so you would call the Flagsmith.Client function with the
+  # the same configuration except the `enable_analytics` that now you wanted to be true
+  # so that when passing the environment or flags to other functions it would have
+  # enable analytics (or say default_flag_handler to be different from the initial
+  # config)
+  # this allows that to happen - it's not that I see this as being very common but
+  # I would expect it to work that way
+  defp replace_config({:ok, response}, config_to_replace) do
+    case response do
+      %Schemas.Environment{} = env -> {:ok, %{env | __configuration__: config_to_replace}}
+      %Schemas.Flags{} = flags -> {:ok, %{flags | __configuration__: config_to_replace}}
+      _ -> {:ok, response}
+    end
+  end
+
+  defp replace_config(response, _), do: response
 end
