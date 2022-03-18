@@ -1,5 +1,4 @@
 defmodule Flagsmith.Configuration do
-  use TypedEctoSchema
   require Logger
 
   @default_url "https://api.flagsmith.com/api/v1"
