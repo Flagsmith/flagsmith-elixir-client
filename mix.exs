@@ -4,7 +4,7 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "0.1.11",
+      version: "0.1.12",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
