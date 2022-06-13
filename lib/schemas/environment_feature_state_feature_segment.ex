@@ -2,11 +2,8 @@ defmodule Flagsmith.Schemas.Environment.FeatureState.FeatureSegment do
   use TypedEctoSchema
   import Ecto.Changeset
 
-  alias Flagsmith.Schemas.Environment
-
   @moduledoc """
-  Ecto schema representing a Flagsmith full feature state definition (as represented 
-  in the environment definition).
+  Ecto schema representing a FeatureState's Segment definition.
   """
 
   @primary_key false

@@ -17,7 +17,7 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
   def type(), do: :map
 
   @type t() :: %__MODULE__{
-          :value => String.t() | number() | boolean(),
+          :value => String.t() | Decimal.t() | Version.t() | number() | boolean(),
           :type => :string | :decimal | :boolean | :semver
         }
 
