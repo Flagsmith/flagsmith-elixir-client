@@ -3,6 +3,8 @@ defmodule Flagsmith.Schemas.Types.AnyOf do
 
   @moduledoc false
 
+  @type t :: term()
+
   def type(_params), do: :map
 
   def init(opts),
