@@ -17,7 +17,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     field(:feature_state_value, :string)
 
     embeds_one(:feature, Environment.Feature)
-
+    embeds_one(:feature_segment, __MODULE__.FeatureSegment)
     embeds_many(:multivariate_feature_state_values, Environment.MultivariateFeatureStateValue)
   end
 
@@ -28,6 +28,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     struct
     |> cast(params, [:featurestate_uuid, :enabled, :django_id, :feature_state_value])
     |> cast_embed(:feature)
+    |> cast_embed(:feature_segment)
     |> cast_embed(:multivariate_feature_state_values)
   end
 
@@ -68,4 +69,22 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
       do: {:ok, value}
 
   def extract_multivariate_value(_), do: {:error, :invalid_multivariate}
+
+  @doc false
+  def is_higher_priority?(%__MODULE__{feature_segment: fs_a}, %__MODULE__{feature_segment: fs_b}) do
+    case {fs_a, fs_b} do
+      {nil, nil} ->
+        false
+
+      {nil, _} ->
+        false
+
+      {_, nil} ->
+        true
+
+      {%__MODULE__.FeatureSegment{priority: priority_a},
+       %__MODULE__.FeatureSegment{priority: priority_b}} ->
+        priority_a < priority_b
+    end
+  end
 end

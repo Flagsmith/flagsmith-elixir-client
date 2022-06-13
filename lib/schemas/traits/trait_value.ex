@@ -18,7 +18,7 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
 
   @type t() :: %__MODULE__{
           :value => String.t() | number() | boolean(),
-          :type => :string | :decimal | :boolean
+          :type => :string | :decimal | :boolean | :semver
         }
 
   @derive {Jason.Encoder, only: [:value, :type]}
@@ -55,8 +55,15 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
   def cast(data) when data in [false, true],
     do: {:ok, %__MODULE__{value: data, type: :boolean}}
 
-  def cast(data) when is_binary(data),
-    do: {:ok, %__MODULE__{value: data, type: :string}}
+  def cast(data) when is_binary(data) do
+    case String.ends_with?(data, ":semver") do
+      true ->
+        create_semver(data)
+
+      false ->
+        {:ok, %__MODULE__{value: data, type: :string}}
+    end
+  end
 
   def cast(_), do: :error
 
@@ -97,6 +104,9 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
       when to_convert in ["false", "true", "False", "True"],
       do: cast(to_convert)
 
+  def convert_value_to(%__MODULE__{type: :semver}, to_convert),
+    do: Version.parse(to_convert)
+
   def convert_value_to(%__MODULE__{type: type}, to_convert),
     do: Ecto.Type.cast(type, to_convert)
 
@@ -112,4 +122,18 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
 
   defp convert_number(data) when is_integer(data) or is_binary(data),
     do: Decimal.new(data)
+
+  def is_semver(data) when is_binary(data),
+    do: String.ends_with?(data, ":semver")
+
+  def is_semver(_), do: false
+
+  def create_semver(%Version{} = version), do: {:ok, %__MODULE__{value: version, type: :semver}}
+
+  def create_semver(data) when is_binary(data) do
+    without_semver = String.replace_suffix(data, ":semver", "")
+    semver = Version.parse!(without_semver)
+
+    {:ok, %__MODULE__{value: semver, type: :semver}}
+  end
 end
