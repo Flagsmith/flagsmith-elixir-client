@@ -168,14 +168,16 @@ defmodule Flagsmith.Engine do
     :ets.foldr(fn {_index, segment}, acc -> [segment | acc] end, [], table_segments)
   end
 
-  defp replace_multivariates(features, %Identity{identifier: identity_id}) do
+  defp replace_multivariates(features, %Identity{} = identity) do
     features
     |> Enum.map(fn %{feature: %{type: type}} = feature_state ->
       case type do
         "MULTIVARIATE" ->
           uuid = Environment.FeatureState.get_hashing_id(feature_state)
+
           mv_fs = Map.get(feature_state, :multivariate_feature_state_values, [])
-          percentage = percentage_from_ids([uuid, identity_id])
+
+          percentage = percentage_from_ids([uuid, Identity.composite_key(identity)])
 
           case find_first_multivariate(mv_fs, percentage) do
             {:ok, new_value} -> %{feature_state | feature_state_value: new_value}
@@ -189,7 +191,14 @@ defmodule Flagsmith.Engine do
   end
 
   defp find_first_multivariate(mvs, percentage) do
-    Enum.reduce_while(mvs, 0, fn %{percentage_allocation: p_allot} = mv, start_perc ->
+    mvs
+    |> Enum.sort_by(fn %{id: id, mv_fs_value_uuid: uuid} ->
+      case id do
+        nil -> uuid
+        _ -> id
+      end
+    end)
+    |> Enum.reduce_while(0, fn %{percentage_allocation: p_allot} = mv, start_perc ->
       limit = p_allot + start_perc
 
       case start_perc <= percentage and percentage < limit do

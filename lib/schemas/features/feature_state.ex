@@ -2,6 +2,8 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
   use TypedEctoSchema
   import Ecto.Changeset
 
+  alias Flagsmith.Schemas.Types
+
   @moduledoc """
   Ecto schema representing a Flagsmith base feature state definition. This differs
   from the `t:Flagsmith.Schemas.Environment.FeatureState.t/0` in the fields that make
@@ -13,7 +15,7 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
     field(:enabled, :boolean)
     field(:environment, :integer)
     field(:feature_segment, :integer)
-    field(:feature_state_value, :string)
+    field(:feature_state_value, Types.AnyOf, types: [:string, :integer, :float, :boolean])
     field(:id, :integer)
     field(:identity, :integer)
 

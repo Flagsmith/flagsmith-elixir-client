@@ -3,6 +3,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
   import Ecto.Changeset
 
   alias Flagsmith.Schemas.Environment
+  alias Flagsmith.Schemas.Types
 
   @moduledoc """
   Ecto schema representing a Flagsmith full feature state definition (as represented 
@@ -14,7 +15,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     field(:enabled, :boolean)
     field(:django_id, :integer)
 
-    field(:feature_state_value, :string)
+    field(:feature_state_value, Types.AnyOf, types: [:string, :integer, :float, :boolean])
 
     embeds_one(:feature, Environment.Feature)
     embeds_one(:feature_segment, __MODULE__.FeatureSegment)
@@ -55,7 +56,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     do: id
 
   def get_hashing_id(%__MODULE__{django_id: django_id}),
-    do: django_id
+    do: "#{django_id}"
 
   def get_hashing_id(%{id: id}),
     do: id

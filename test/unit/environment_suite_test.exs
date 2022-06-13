@@ -23,7 +23,11 @@ defmodule Flagsmith.Engine.EnvironmentSuite.Test do
 
   Map.get(@json_env, "identities_and_responses")
   |> Enum.each(fn %{
-                    "identity" => %{"identifier" => id, "identity_traits" => traits},
+                    "identity" => %{
+                      "identifier" => id,
+                      "identity_traits" => traits,
+                      "django_id" => django_id
+                    },
                     "response" => %{"flags" => response_flags}
                   } ->
     test "#{id} from json spec", %{env: %{api_key: api_key} = env} do
@@ -31,6 +35,7 @@ defmodule Flagsmith.Engine.EnvironmentSuite.Test do
 
       identity =
         Flagsmith.Schemas.Identity.from_id_traits(unquote(id), unquote(Macro.escape(traits)))
+        |> Map.put(:django_id, unquote(django_id))
 
       assert %Schemas.Flags{flags: flags} =
                env
