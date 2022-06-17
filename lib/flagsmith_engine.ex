@@ -84,7 +84,7 @@ defmodule Flagsmith.Engine do
     table_segments = :ets.new(:temp_segments, [:ordered_set])
     # keep a table to track the feature_states by name so we can compare in case
     # of same name fs_s
-    table_track = :ets.new(:temp_track, [])
+    table_features = :ets.new(:temp_track, [])
 
     # reduce through all the segments, using an accumulator for keeping track of the
     # current index of the segment
@@ -92,11 +92,11 @@ defmodule Flagsmith.Engine do
       # for each segment, iterate through those segment's feature states
       Enum.each(segment_fs, fn %Environment.FeatureState{feature: feature} = fs ->
         # lookup on the tracking table if we have an item by the feature name
-        case :ets.lookup(table_track, feature.name) do
+        case :ets.lookup(table_features, feature.name) do
           [] ->
             # if we don't, then we insert the initial one, keyed by name, and with
             # the full feature_state, index, and an empty list
-            :ets.insert(table_track, {feature.name, fs, index, []})
+            :ets.insert(table_features, {feature.name, fs, index, []})
 
           # if we do then we check if the existing one in the table is higher
           # priority than the current one being iterated
@@ -107,7 +107,7 @@ defmodule Flagsmith.Engine do
                 # and as such we add the current iteration index to the list to
                 # remove but keep the other tuple elements as they were
                 :ets.insert(
-                  table_track,
+                  table_features,
                   {feature.name, existing, existing_index, [index | to_rem]}
                 )
 
@@ -119,7 +119,7 @@ defmodule Flagsmith.Engine do
                 # (the one that was previously the highest priority one) to the list
                 # to be removed
                 :ets.insert(
-                  table_track,
+                  table_features,
                   {feature.name, fs, index, [existing_index | to_rem]}
                 )
             end
@@ -128,36 +128,41 @@ defmodule Flagsmith.Engine do
 
       # finally we insert the segment, keyed by the index (so it keeps the order as
       # the segments table is an ordered set), but unmodified
-      # this first iteration is just find any duplicate feature states
+      # this first iteration is just to find any duplicate feature states
       :ets.insert(table_segments, {index, segment})
 
-      # lastly we increment the accumulator by one so next iteration as the correct
+      # lastly we increment the accumulator by one so next iteration has the correct
       # index
       index + 1
     end)
 
     # now we convert the tracking table into a list and iterate through it
-    :ets.tab2list(table_track)
-    |> Enum.each(fn {name, %Environment.FeatureState{featurestate_uuid: uuid}, _index, to_remove} ->
-      # since we have the name, full feature state, and a list of indexes corresponding
-      # to segments that had this same feature state but with lower priority
-      # we iterate the list of the indexes
-      Enum.each(to_remove, fn index ->
-        # we grab the segment for that index from the segments table
-        [{_, %Segments.Segment{feature_states: segment_fs} = segment}] =
-          :ets.lookup(table_segments, index)
+    :ets.tab2list(table_features)
+    |> Enum.each(fn
+      {_name, _, _index, []} ->
+        # feature state has no conflicting states because the to remove list is empty
+        :ok
 
-        # and now we filter the feature states of that segment, that match the name
-        # of this one, but not the uuid
-        new_segment_fs =
-          Enum.reject(segment_fs, fn %Environment.FeatureState{feature: feature} = fs ->
-            feature.name == name && uuid != fs.featurestate_uuid
-          end)
+      {name, %Environment.FeatureState{featurestate_uuid: uuid}, _index, to_remove} ->
+        # since we have the name, full feature state, and a list of indexes
+        # corresponding to segments that had this same feature state but with lower
+        # priority we iterate the list of the indexes
+        Enum.each(to_remove, fn index ->
+          # we grab the segment for that index from the segments table
+          [{_, %Segments.Segment{feature_states: segment_fs} = segment}] =
+            :ets.lookup(table_segments, index)
 
-        # and lastly we replace that segment in the segments table, with the new
-        # filtered feature states
-        :ets.insert(table_segments, {index, %{segment | feature_states: new_segment_fs}})
-      end)
+          # and now we filter the feature states of that segment, that match the name
+          # of this one, but not the uuid
+          new_segment_fs =
+            Enum.reject(segment_fs, fn %Environment.FeatureState{feature: feature} = fs ->
+              feature.name == name && uuid != fs.featurestate_uuid
+            end)
+
+          # and lastly we replace that segment in the segments table, with the new
+          # filtered feature states
+          :ets.insert(table_segments, {index, %{segment | feature_states: new_segment_fs}})
+        end)
     end)
 
     # lastly we fold through the right side (since it's an ordered set, it will go
@@ -165,7 +170,13 @@ defmodule Flagsmith.Engine do
     # and we just accumulate all segments into a new list
     # since the segments in this table were updated in the last step we get the
     # "cleaned" of duplicate features list of segments in the same original order
-    :ets.foldr(fn {_index, segment}, acc -> [segment | acc] end, [], table_segments)
+    final_segments =
+      :ets.foldr(fn {_index, segment}, acc -> [segment | acc] end, [], table_segments)
+
+    :ets.delete(table_segments)
+    :ets.delete(table_features)
+
+    final_segments
   end
 
   defp replace_multivariates(features, %Identity{} = identity) do
