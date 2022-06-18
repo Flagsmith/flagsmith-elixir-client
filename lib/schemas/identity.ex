@@ -9,6 +9,7 @@ defmodule Flagsmith.Schemas.Identity do
 
   @primary_key false
   typed_embedded_schema do
+    field(:django_id, :integer)
     field(:identifier, :string)
     field(:environment_key, :string)
     embeds_many(:flags, Flagsmith.Schemas.Features.FeatureState)
@@ -20,7 +21,7 @@ defmodule Flagsmith.Schemas.Identity do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [:identifier, :environment_key])
+    |> cast(params, [:identifier, :environment_key, :django_id])
     |> validate_required([:identifier])
     |> cast_embed(:traits)
     |> cast_embed(:flags)
@@ -68,7 +69,11 @@ defmodule Flagsmith.Schemas.Identity do
     do: %{struct | environment_key: environment_key}
 
   @doc false
-  @spec composite_key(__MODULE__.t()) :: String.t()
+  @spec composite_key(__MODULE__.t()) :: String.t() | non_neg_integer()
+  def composite_key(%__MODULE__{django_id: django_id})
+      when is_integer(django_id),
+      do: django_id
+
   def composite_key(%__MODULE__{identifier: identifier, environment_key: environment_key})
       when is_binary(environment_key),
       do: "#{environment_key}_#{identifier}"

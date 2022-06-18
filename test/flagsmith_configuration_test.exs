@@ -8,7 +8,7 @@ defmodule Flagsmith.Configuration.Test do
   # expected and making sure it wasn't a mistake.
   # If we used those from the configuration as we do in other tests, then
   # we wouldn't be asserting much
-  @default_url "https://api.flagsmith.com/api/v1"
+  @default_url "https://edge.api.flagsmith.com/api/v1/"
   @environment_header "X-Environment-Key"
   @paths %{
     flags: "/flags/",

@@ -54,11 +54,43 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:NOT_CONTAINS, "bar", "bar", false},
     {:NOT_CONTAINS, "bar", "baz", true},
     {:REGEX, "foo", "[a-z]+", true},
-    {:REGEX, "FOO", "[a-z]+", false}
+    {:REGEX, "FOO", "[a-z]+", false},
+    {:REGEX, "1.2.3", "\\d", true}
   ]
 
   test "all conditions" do
     assert Enum.all?(@conditions, fn {operator, trait_value, condition_value, expected} ->
+             assert {:ok, value_form} = Trait.Value.cast(trait_value)
+
+             assert expected ==
+                      Flagsmith.Engine.trait_match(operator, condition_value, value_form)
+           end)
+  end
+
+  @semver_conditions [
+    {:EQUAL, "1.0.0", "1.0.0:semver", true},
+    {:EQUAL, "1.0.0", "1.0.1:semver", false},
+    {:NOT_EQUAL, "1.0.0", "1.0.0:semver", false},
+    {:NOT_EQUAL, "1.0.0", "1.0.1:semver", true},
+    {:GREATER_THAN, "1.0.1", "1.0.0:semver", true},
+    {:GREATER_THAN, "1.0.0", "1.0.0-beta:semver", true},
+    {:GREATER_THAN, "1.0.1", "1.2.0:semver", false},
+    {:GREATER_THAN, "1.0.1", "1.0.1:semver", false},
+    {:GREATER_THAN, "1.2.4", "1.2.3-pre.2+build.4:semver", true},
+    {:LESS_THAN, "1.0.0", "1.0.1:semver", true},
+    {:LESS_THAN, "1.0.0", "1.0.0:semver", false},
+    {:LESS_THAN, "1.0.1", "1.0.0:semver", false},
+    {:LESS_THAN, "1.0.0-rc.2", "1.0.0-rc.3:semver", true},
+    {:GREATER_THAN_INCLUSIVE, "1.0.1", "1.0.0:semver", true},
+    {:GREATER_THAN_INCLUSIVE, "1.0.1", "1.2.0:semver", false},
+    {:GREATER_THAN_INCLUSIVE, "1.0.1", "1.0.1:semver", true},
+    {:LESS_THAN_INCLUSIVE, "1.0.0", "1.0.1:semver", true},
+    {:LESS_THAN_INCLUSIVE, "1.0.0", "1.0.0:semver", true},
+    {:LESS_THAN_INCLUSIVE, "1.0.1", "1.0.0:semver", false}
+  ]
+
+  test "all semver conditions" do
+    assert Enum.all?(@semver_conditions, fn {operator, trait_value, condition_value, expected} ->
              assert {:ok, value_form} = Trait.Value.cast(trait_value)
 
              assert expected ==

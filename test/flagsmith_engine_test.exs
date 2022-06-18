@@ -41,7 +41,7 @@ defmodule Flagsmith.EngineTest do
                         value: "34px"
                       },
                       mv_fs_value_uuid: "448a7777-91cf-47b0-bf16-a4d566ef7745",
-                      percentage_allocation: 80.0
+                      percentage_allocation: 60.0
                     }
                   ]
                 },
@@ -160,7 +160,7 @@ defmodule Flagsmith.EngineTest do
                               %Segments.Segment.Condition{
                                 operator: :PERCENTAGE_SPLIT,
                                 property_: nil,
-                                value: "50"
+                                value: "20"
                               }
                             ],
                             rules: [],

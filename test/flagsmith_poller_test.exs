@@ -389,10 +389,10 @@ defmodule Flagsmith.Client.Poller.Test do
                     value: "very_yes"
                   }
                 }
-              }} = Flagsmith.Client.get_identity_flags(config, "testing", [])
+              }} = Flagsmith.Client.get_identity_flags(config, "8", [])
 
-      # a different id that hashes both to higher than 80% in the multivariate part
-      # and higher than 50% on the PERCENTAGE_SPLIT segment eval
+      # a different id that hashes both to higher than 60% in the multivariate part
+      # and higher than 20% on the PERCENTAGE_SPLIT segment eval
       # this should render the header_size with the environment value and the same
       # for the secret_button
       assert {:ok,
@@ -420,7 +420,7 @@ defmodule Flagsmith.Client.Poller.Test do
                     value: "very_yes"
                   }
                 }
-              }} = Flagsmith.Client.get_identity_flags(config, "24", [])
+              }} = Flagsmith.Client.get_identity_flags(config, "atest12120", [])
 
       # the same id (meaning it should hash to the same things, but now passing a trait
       # results in a the secret_button being nil according to another segment rule
@@ -452,7 +452,7 @@ defmodule Flagsmith.Client.Poller.Test do
                   }
                 }
               }} =
-               Flagsmith.Client.get_identity_flags(config, "24", [
+               Flagsmith.Client.get_identity_flags(config, "atest12120", [
                  %{trait_key: "show_popup", trait_value: false}
                ])
 

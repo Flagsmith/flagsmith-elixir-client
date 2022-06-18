@@ -1,7 +1,7 @@
 defmodule Flagsmith.Configuration do
   require Logger
 
-  @default_url "https://api.flagsmith.com/api/v1"
+  @default_url "https://edge.api.flagsmith.com/api/v1/"
   @environment_header "X-Environment-Key"
 
   @api_paths %{
