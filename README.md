@@ -32,11 +32,11 @@ To configure it at the application level, add to the relevant config file (i.e.:
 ```elixir
 config :flagsmith_engine, :configuration,
        environment_key: "<YOUR SDK KEY>",
-       api_url: "https://api.flagsmith.com/api/v1>",
+       api_url: "https://edge.api.flagsmith.com/api/v1>",
        default_flag_handler: function_defaults_to_not_found,
        custom_headers: [{"to add to", "the requests"}],
        request_timeout_milliseconds: 5000,
-       enabled_local_evaluation: false,
+       enable_local_evaluation: false,
        environment_refresh_interval_milliseconds: 60_000,
        retries: 0,
        enable_analytics: false
@@ -185,7 +185,7 @@ And obviously, if the identity has that trait and you do the regular API call wi
 
 - `environment_key` -> a server side sdk key (required)
 
-- `api_url` -> the base url to which requests against the Flagsmith API will be made (defaults to: `"https://api.flagsmith.com/api/v1"`)
+- `api_url` -> the base url to which requests against the Flagsmith API will be made (defaults to: `"https://edge.api.flagsmith.com/api/v1"`)
 
 - `default_flag_handler` -> a 1 arity function that receives a feature name (String.t()) and is called when calling feature related functions and the given feature isn't found or the API call fails -> defaults to returning `:not_found`
 
