@@ -10,7 +10,7 @@ The SDK for Elixir applications for [https://www.flagsmith.com/](https://www.fla
 
 For full documentation visit [https://docs.flagsmith.com/clients/server-side](https://docs.flagsmith.com/clients/server-side).
 
-`hexdocs.pm` package documentation can be found at [https://hexdocs.pm/flagsmith_engine]
+`hexdocs.pm` package documentation can be found at [https://hexdocs.pm/flagsmith_engine](https://hexdocs.pm/flagsmith_engine)
 
 ## Contributing
 
