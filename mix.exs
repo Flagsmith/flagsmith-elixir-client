@@ -17,8 +17,8 @@ defmodule FlagsmithEngine.MixProject do
       source_url: "https://github.com/Flagsmith/flagsmith-elixir-client",
       homepage_url: "https://hexdocs.pm/flagsmith_engine/readme.html",
       docs: [
-        main: "Flagsmith.Client",
-        extras: ["README.md"],
+        main: "hexdocs",
+        extras: ["HEXDOCS.md", "README.md"],
         nest_modules_by_prefix: [
           Flagsmith.Schemas.Environment,
           Flagsmith.Schemas.Features,
