@@ -28,10 +28,10 @@ defmodule Flagsmith.Client.Analytics.Processor do
   #################################
 
   @doc """
-  Given a `t:Flagsmith.Schemas.Features.FeatureState.t/0` or 
+  Given a `t:Flagsmith.Schemas.Features.FeatureState.t/0` or
   `t:Flagsmith.Schemas.Features.Feature.t/0` or `t:Flagsmith.Schemas.Flag.t/0` and an
   `t:Flagsmith.Schemas.Environment.t/0` or `t:Flagsmith.Configuration.t/0` add or
-  increment the call count for feature id to be reported to the analytics endpoint.
+  increment the call count for feature name to be reported to the analytics endpoint.
   If `:enable_analytics` in the configuration value of the environment isn't true
   it's a no op and returns (:noop), otherwise if   the feature/flag doesn't have an
   id it returns an error.
@@ -55,7 +55,7 @@ defmodule Flagsmith.Client.Analytics.Processor do
         to_track,
         %Configuration{enable_analytics: true} = config
       ) do
-    case extract_feature_id(to_track) do
+    case extract_feature_name(to_track) do
       id when is_binary(id) or is_integer(id) ->
         do_track(id, config)
 
@@ -66,11 +66,11 @@ defmodule Flagsmith.Client.Analytics.Processor do
 
   def track(_, _), do: :noop
 
-  defp extract_feature_id(feature) do
+  defp extract_feature_name(feature) do
     case feature do
-      %Schemas.Features.FeatureState{feature: %{id: id}} -> id
-      %Schemas.Features.Feature{id: id} -> id
-      %Schemas.Flag{feature_id: id} -> id
+      %Schemas.Features.FeatureState{feature: %{name: name}} -> name
+      %Schemas.Features.Feature{name: name} -> name
+      %Schemas.Flag{feature_name: name} -> name
       _ -> :invalid_feature
     end
   end
@@ -111,7 +111,7 @@ defmodule Flagsmith.Client.Analytics.Processor do
   end
 
   @doc """
-  Starts and links a gen_server represented by this module, using a 
+  Starts and links a gen_server represented by this module, using a
   `t:Flagsmith.Configuration.t/0` as the basis to derive its registration name and
   inner details.
   """
@@ -133,7 +133,7 @@ defmodule Flagsmith.Client.Analytics.Processor do
   end
 
   #################################
-  ########### Statem Implementation / Internal 
+  ########### Statem Implementation / Internal
   #################################
 
   @doc false
@@ -200,10 +200,10 @@ defmodule Flagsmith.Client.Analytics.Processor do
   def handle_event({:timeout, :dump}, nil, _, _data),
     do: {:keep_state_and_data, [{:next_event, :internal, :dump}]}
 
-  # a cast for tracking a feature_id simply sets or updates that feature id track
+  # a cast for tracking a feature_name simply sets or updates that feature name track
   # in the tracking map
-  def handle_event(:cast, {:track, feature_id}, _, %{tracking: tracking} = data) do
-    new_tracking = Map.update(tracking, feature_id, 1, &(&1 + 1))
+  def handle_event(:cast, {:track, feature_name}, _, %{tracking: tracking} = data) do
+    new_tracking = Map.update(tracking, feature_name, 1, &(&1 + 1))
     {:keep_state, %{data | tracking: new_tracking}, []}
   end
 
