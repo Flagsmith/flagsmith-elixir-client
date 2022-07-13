@@ -106,8 +106,7 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
 
       # get a flag from that environment
       feature_name_1 = "secret_button"
-      assert %Schemas.Flag{enabled: true} =
-               Flagsmith.Client.get_flag(environment, feature_name_1)
+      assert %Schemas.Flag{enabled: true} = Flagsmith.Client.get_flag(environment, feature_name_1)
 
       # assert that now there's a processor for the environment key we've been using
       pid = Flagsmith.Client.Analytics.Processor.whereis("test_key")
@@ -144,6 +143,7 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       # assert other features track correctly too
       # get another flag from that environment
       feature_name_2 = "header_size"
+
       assert %Schemas.Flag{enabled: false} =
                Flagsmith.Client.get_flag(environment, feature_name_2)
 
