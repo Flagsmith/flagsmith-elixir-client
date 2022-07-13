@@ -4,12 +4,12 @@ defmodule FlagsmithEngine.MixProject do
   def project do
     [
       app: :flagsmith_engine,
-      version: "1.0.0",
+      version: "1.0.1",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       elixirc_paths: elixirc_paths(Mix.env()),
-      # DIALYZER 
+      # DIALYZER
       dialyzer: [
         plt_file: {:no_warn, "priv/plts/#{Mix.env()}/dialyzer.plt"}
       ],

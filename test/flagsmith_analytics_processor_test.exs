@@ -11,7 +11,7 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
   @api_url Flagsmith.Configuration.default_url()
   @api_paths Flagsmith.Configuration.api_paths()
 
-  # setup Mox to verify any expectations 
+  # setup Mox to verify any expectations
   setup :verify_on_exit!
 
   # we start the supervisor as a supervised process so it's shut down on every test
@@ -77,7 +77,7 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       :ok
     end
 
-    test "dosn't start if enable_analytics is false", %{config: config} do
+    test "doesn't start if enable_analytics is false", %{config: config} do
       config = %{config | enable_analytics: false}
       {:ok, environment} = Flagsmith.Client.get_environment(config)
 
@@ -105,21 +105,21 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       {:ok, environment} = Flagsmith.Client.get_environment(config)
 
       # get a flag from that environment
-      assert %Schemas.Flag{feature_id: id, enabled: true} =
-               Flagsmith.Client.get_flag(environment, "secret_button")
+      feature_name_1 = "secret_button"
+      assert %Schemas.Flag{enabled: true} = Flagsmith.Client.get_flag(environment, feature_name_1)
 
       # assert that now there's a processor for the environment key we've been using
       pid = Flagsmith.Client.Analytics.Processor.whereis("test_key")
       assert is_pid(pid)
 
       # assert it's tracking correctly:
-      # - the tracking map should have 1 key being the id of the flag we retrieved
+      # - the tracking map should have 1 key being the name of the flag we retrieved
       # with the value being 1
       assert {:on,
               %Flagsmith.Client.Analytics.Processor{
                 configuration: ^config,
                 dump: 60_000,
-                tracking: %{^id => 1} = tracking_map_1
+                tracking: %{^feature_name_1 => 1} = tracking_map_1
               }} = :sys.get_state(pid)
 
       # assert there's only 1 key on the tracking map
@@ -129,12 +129,12 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       assert Flagsmith.Client.is_feature_enabled(environment, "secret_button")
 
       # assert that the processor is still alive and that now the tracking for
-      # that feature id is at 2
+      # that feature name is at 2
       assert {:on,
               %Flagsmith.Client.Analytics.Processor{
                 configuration: ^config,
                 dump: 60_000,
-                tracking: %{^id => 2} = tracking_map_2
+                tracking: %{^feature_name_1 => 2} = tracking_map_2
               }} = :sys.get_state(pid)
 
       # assert there's still only 1 key on the tracking map
@@ -142,19 +142,21 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
 
       # assert other features track correctly too
       # get another flag from that environment
-      assert %Schemas.Flag{feature_id: id_2, enabled: false} =
-               Flagsmith.Client.get_flag(environment, "header_size")
+      feature_name_2 = "header_size"
 
-      refute Flagsmith.Client.is_feature_enabled(environment, "header_size")
+      assert %Schemas.Flag{enabled: false} =
+               Flagsmith.Client.get_flag(environment, feature_name_2)
+
+      refute Flagsmith.Client.is_feature_enabled(environment, feature_name_2)
 
       # assert that the processor is still alive and that now the tracking for
-      # the previous feature id is still at 2, and for the new one, id_2, is at
+      # the previous feature is still at 2, and for the new one, is at
       # 2 too
       assert {:on,
               %Flagsmith.Client.Analytics.Processor{
                 configuration: ^config,
                 dump: 60_000,
-                tracking: %{^id => 2, ^id_2 => 2} = tracking_map_3
+                tracking: %{^feature_name_1 => 2, ^feature_name_2 => 2} = tracking_map_3
               }} = :sys.get_state(pid)
 
       # assert there's now 2 keys on the tracking map
@@ -172,13 +174,16 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       # change the dump timeout
       assert :ok = :gen_statem.call(pid, {:update_dump_rate, 1})
 
+      # use an example feature name that we know exists
+      feature_name = "secret_button"
+
       # we need to set an additional expectation since it will call the analytics
       # endpoint
 
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         assert_request(
           tesla_env,
-          body: "{\"17985\":1}",
+          body: "{\"#{feature_name}\":1}",
           query: [],
           headers: [{@environment_header, "test_key"}],
           url: Path.join([@api_url, @api_paths.analytics]) <> "/",
@@ -196,7 +201,7 @@ defmodule Flagsmith.Client.Analytics.Processor.Test do
       # attempts to dump, meaning this inadvertently tests that after a dump the
       # tracking map is effectively empty
 
-      assert Flagsmith.Client.is_feature_enabled(environment, "secret_button")
+      assert Flagsmith.Client.is_feature_enabled(environment, feature_name)
 
       assert Flagsmith.Test.Helpers.wait_until(
                fn ->
