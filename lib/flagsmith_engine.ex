@@ -553,6 +553,21 @@ defmodule Flagsmith.Engine do
     end
   end
 
+  def trait_match(:MODULO, trait, %Trait.Value{type: type, value: value}) do
+    with true <- is_binary(trait),
+         [mod, result] <- String.split(trait, "|"),
+         {mod_val, ""} <- Integer.parse(mod),
+         {result_val, ""} <- Integer.parse(result),
+         :decimal <- type,
+         true <- Decimal.integer?(value),
+         value_integer <- Decimal.to_integer(value) do
+      Integer.mod(value_integer, mod_val) == result_val
+    else
+      _ ->
+        false
+    end
+  end
+
   def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
       when condition in @condition_operators and not is_struct(not_cast) and not is_map(not_cast) do
     case Trait.Value.is_semver(not_cast) do

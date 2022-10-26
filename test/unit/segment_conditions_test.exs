@@ -55,7 +55,15 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:NOT_CONTAINS, "bar", "baz", true},
     {:REGEX, "foo", "[a-z]+", true},
     {:REGEX, "FOO", "[a-z]+", false},
-    {:REGEX, "1.2.3", "\\d", true}
+    {:REGEX, "1.2.3", "\\d", true},
+    {:MODULO, 1, "2|0", false},
+    {:MODULO, 2, "2|0", true},
+    {:MODULO, 3, "2|0", false},
+    {:MODULO, 34.2, "4|3", false},
+    {:MODULO, 35.0, "4|3", true},
+    {:MODULO, "dummy", "3|0", false},
+    {:MODULO, "1.0.0", "3|0", false},
+    {:MODULO, false, "1|3", false}
   ]
 
   test "all conditions" do
