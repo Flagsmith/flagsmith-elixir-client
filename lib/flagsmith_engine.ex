@@ -553,12 +553,6 @@ defmodule Flagsmith.Engine do
     end
   end
 
-  def trait_match(operator, _, nil) when operator in [:IS_SET, :IS_NOT_SET],
-    do: operator == :IS_NOT_SET
-
-  def trait_match(operator, _, %Trait.Value{}) when operator in [:IS_SET, :IS_NOT_SET],
-    do: operator == :IS_SET
-
   def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
       when condition in @condition_operators and not is_struct(not_cast) and not is_map(not_cast) do
     case Trait.Value.is_semver(not_cast) do

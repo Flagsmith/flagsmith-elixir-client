@@ -17,6 +17,7 @@ defmodule Flagsmith.Schemas.Types.Operator do
       :CONTAINS,
       :IS_SET,
       :IS_NOT_SET,
+      :MODULO,
       :PERCENTAGE_SPLIT
     ]
 end

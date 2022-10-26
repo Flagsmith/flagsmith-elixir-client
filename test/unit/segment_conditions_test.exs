@@ -55,11 +55,7 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:NOT_CONTAINS, "bar", "baz", true},
     {:REGEX, "foo", "[a-z]+", true},
     {:REGEX, "FOO", "[a-z]+", false},
-    {:REGEX, "1.2.3", "\\d", true},
-    {:IS_SET, nil, nil, false},
-    {:IS_SET, "oi", nil, true},
-    {:IS_NOT_SET, nil, nil, true},
-    {:IS_NOT_SET, "oi", nil, false}
+    {:REGEX, "1.2.3", "\\d", true}
   ]
 
   test "all conditions" do
