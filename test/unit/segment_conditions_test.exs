@@ -55,7 +55,11 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:NOT_CONTAINS, "bar", "baz", true},
     {:REGEX, "foo", "[a-z]+", true},
     {:REGEX, "FOO", "[a-z]+", false},
-    {:REGEX, "1.2.3", "\\d", true}
+    {:REGEX, "1.2.3", "\\d", true},
+    {:IS_SET, nil, nil, false},
+    {:IS_SET, "oi", nil, true},
+    {:IS_NOT_SET, nil, nil, true},
+    {:IS_NOT_SET, "oi", nil, false}
   ]
 
   test "all conditions" do
@@ -353,5 +357,62 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     ]
 
     refute Flagsmith.Engine.traits_match_segment_rule(traits_3, @segment_rule_nested_any, 1, 1)
+  end
+
+  @segment_rule_all_is_or_not_set %Segment.Rule{
+    conditions: [],
+    rules: [
+      %Segment.Rule{
+        conditions: [
+          %Segment.Condition{
+            operator: :IS_SET,
+            property_: "test_is_set"
+          },
+          %Segment.Condition{
+            operator: :IS_NOT_SET,
+            property_: "test_is_not_set"
+          }
+        ],
+        rules: [],
+        type: :ALL
+      }
+    ],
+    type: :ALL
+  }
+
+  test "Segment.Rule IS_SET and IS_NOT_SET" do
+    # test_false is in the inner rule condition, there's two inner conditions for the
+    # it, both equals for false and true, so it should always test true with `ANY`
+    traits_1 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    assert Flagsmith.Engine.traits_match_segment_rule(
+             traits_1,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    traits_2 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_is_not_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    refute Flagsmith.Engine.traits_match_segment_rule(
+             traits_2,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
   end
 end

@@ -388,6 +388,24 @@ defmodule Flagsmith.Engine do
 
   def traits_match_segment_condition(
         traits,
+        %Segments.Segment.Condition{operator: :IS_SET, property_: prop},
+        _segment_id,
+        _identifier
+      ) do
+    Enum.any?(traits, fn %Traits.Trait{trait_key: t_key} -> t_key == prop end)
+  end
+
+  def traits_match_segment_condition(
+        traits,
+        %Segments.Segment.Condition{operator: :IS_NOT_SET, property_: prop},
+        _segment_id,
+        _identifier
+      ) do
+    Enum.all?(traits, fn %Traits.Trait{trait_key: t_key} -> t_key != prop end)
+  end
+
+  def traits_match_segment_condition(
+        traits,
         %Segments.Segment.Condition{operator: operator, value: value, property_: prop},
         _segment_id,
         _identifier
@@ -534,6 +552,12 @@ defmodule Flagsmith.Engine do
       _ -> t_value != value
     end
   end
+
+  def trait_match(operator, _, nil) when operator in [:IS_SET, :IS_NOT_SET],
+    do: operator == :IS_NOT_SET
+
+  def trait_match(operator, _, %Trait.Value{}) when operator in [:IS_SET, :IS_NOT_SET],
+    do: operator == :IS_SET
 
   def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
       when condition in @condition_operators and not is_struct(not_cast) and not is_map(not_cast) do
