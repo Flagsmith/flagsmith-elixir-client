@@ -78,6 +78,32 @@ defmodule Flagsmith.Engine do
     end
   end
 
+  @doc """
+  Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
+  given `t:Flagsmith.Schemas.Environment.t/0`.
+  """
+  @spec get_identity_segments(
+          Environment.t(),
+          Identity.t(),
+          override_traits :: list(Traits.Trait.t())
+        ) :: list(Environment.FeatureState.t())
+  def get_identity_segments(
+        %Environment{
+          project: %Environment.Project{segments: segments}
+        } = env,
+        identity,
+        override_traits \\ []
+      ) do
+    with identity <- Identity.set_env_key(identity, env),
+         segment_features <- get_segment_features(segments, identity, override_traits),
+         prioritized <- clean_segments_by_priority(segment_features),
+         segments <-
+           Enum.filter(prioritized, &evaluate_identity_in_segment(identity, &1, override_traits)),
+         replaced <- Enum.map(segments, &Segments.IdentitySegment.from_segment/1) do
+      replaced
+    end
+  end
+
   defp clean_segments_by_priority(segments) do
     # keep an ordered table by index so we can retrieve the segments in order
     # at the end when manipulating them

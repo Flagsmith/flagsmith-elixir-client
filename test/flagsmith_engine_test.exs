@@ -1,7 +1,7 @@
 defmodule Flagsmith.EngineTest do
   use ExUnit.Case, async: true
 
-  alias Flagsmith.Schemas.{Environment, Features, Segments}
+  alias Flagsmith.Schemas.{Environment, Features, Segments, Traits}
   alias Flagsmith.Engine.Test
 
   # stub the mock so that it calls the normal module as it would under regular usage
@@ -251,6 +251,34 @@ defmodule Flagsmith.EngineTest do
                %Features.FeatureState{},
                %Features.FeatureState{}
              ] = Flagsmith.Engine.get_identity_feature_states(env, identity, [])
+    end
+
+    test "get_identity_segments/3", %{env: env, identity: identity} do
+      # the identity we're using has `show_popup` trait as false by default so
+      # it should evaluate as this segment being for this identity when no traits
+      # are passed
+      assert [%Flagsmith.Schemas.Segments.IdentitySegment{id: 5241, name: "test_segment"}] =
+               Flagsmith.Engine.get_identity_segments(env, identity, [])
+
+      # passing the trait as `true` should make this segment no longer match since
+      # the condition is `show_popup` to be false
+      assert [] =
+               Flagsmith.Engine.get_identity_segments(env, identity, [
+                 %Traits.Trait{
+                   trait_key: "show_popup",
+                   trait_value: %Traits.Trait.Value{value: true, type: :boolean}
+                 }
+               ])
+
+      # and passing the trait as `false` (as is the default) should make it match just
+      # the same as initially
+      assert [%Flagsmith.Schemas.Segments.IdentitySegment{id: 5241, name: "test_segment"}] =
+               Flagsmith.Engine.get_identity_segments(env, identity, [
+                 %Traits.Trait{
+                   trait_key: "show_popup",
+                   trait_value: %Traits.Trait.Value{value: false, type: :boolean}
+                 }
+               ])
     end
 
     test "get_identity_feature_state/4", %{env: env, identity: identity} do
