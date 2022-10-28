@@ -1,4 +1,6 @@
 defmodule Flagsmith.Engine do
+  require Logger
+
   alias Flagsmith.Schemas.{
     Environment,
     Traits,
@@ -69,12 +71,37 @@ defmodule Flagsmith.Engine do
         override_traits \\ []
       ) do
     with identity <- Identity.set_env_key(identity, env),
-         segment_features <- get_segment_features(segments, identity, override_traits),
+         segment_features <-
+           get_identity_applicable_segments(segments, identity, override_traits),
          prioritized <- clean_segments_by_priority(segment_features),
          replaced <- replace_segment_features(fs, prioritized),
          pre_features <- replace_identity_features(replaced, identity_features),
          final_features <- replace_multivariates(pre_features, identity) do
       final_features
+    end
+  end
+
+  @doc """
+  Get list of segments for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
+  given `t:Flagsmith.Schemas.Environment.t/0`.
+  """
+  @spec get_identity_segments(
+          Environment.t(),
+          Identity.t(),
+          override_traits :: list(Traits.Trait.t())
+        ) :: list(Segments.IdentitySegment.t())
+  def get_identity_segments(
+        %Environment{
+          project: %Environment.Project{segments: segments}
+        } = env,
+        identity,
+        override_traits \\ []
+      ) do
+    with identity <- Identity.set_env_key(identity, env),
+         segments <-
+           get_identity_applicable_segments(segments, identity, override_traits),
+         replaced <- Enum.map(segments, &Segments.IdentitySegment.from_segment/1) do
+      replaced
     end
   end
 
@@ -244,12 +271,12 @@ defmodule Flagsmith.Engine do
   Filters a list of segments accordingly to if they match an identity and traits
   (optionally using a list of traits to override those in the identity)
   """
-  @spec get_segment_features(
+  @spec get_identity_applicable_segments(
           segments :: list(Segments.Segment.t()),
           Identity.t(),
           override_traits :: list(Traits.Trait.t())
         ) :: list(Segments.Segment.t())
-  def get_segment_features(segments, identity, override_traits) do
+  def get_identity_applicable_segments(segments, identity, override_traits) do
     Enum.filter(segments, fn segment ->
       evaluate_identity_in_segment(identity, segment, override_traits)
     end)
@@ -384,6 +411,24 @@ defmodule Flagsmith.Engine do
       {_what, _} ->
         false
     end
+  end
+
+  def traits_match_segment_condition(
+        traits,
+        %Segments.Segment.Condition{operator: :IS_SET, property_: prop},
+        _segment_id,
+        _identifier
+      ) do
+    Enum.any?(traits, fn %Traits.Trait{trait_key: t_key} -> t_key == prop end)
+  end
+
+  def traits_match_segment_condition(
+        traits,
+        %Segments.Segment.Condition{operator: :IS_NOT_SET, property_: prop},
+        _segment_id,
+        _identifier
+      ) do
+    Enum.all?(traits, fn %Traits.Trait{trait_key: t_key} -> t_key != prop end)
   end
 
   def traits_match_segment_condition(
@@ -533,6 +578,27 @@ defmodule Flagsmith.Engine do
       :decimal -> not Decimal.equal?(t_value, value)
       _ -> t_value != value
     end
+  end
+
+  def trait_match(:MODULO, trait, %Trait.Value{value: value}) do
+    with true <- is_binary(trait),
+         %Decimal{} <- value,
+         [mod, result] <- String.split(trait, "|"),
+         %Decimal{} = mod_val <- Decimal.new(mod),
+         %Decimal{} = result_val <- Decimal.new(result),
+         %Decimal{} = remainder <- Decimal.rem(value, mod_val) do
+      Decimal.equal?(remainder, result_val)
+    else
+      _ ->
+        false
+    end
+  rescue
+    Decimal.Error ->
+      Logger.warn(
+        "invalid MODULO segment rule or trait value :: rule: #{inspect(trait)} :: value: #{inspect(value)}"
+      )
+
+      false
   end
 
   def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)
