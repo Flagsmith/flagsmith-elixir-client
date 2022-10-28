@@ -71,7 +71,8 @@ defmodule Flagsmith.Engine do
         override_traits \\ []
       ) do
     with identity <- Identity.set_env_key(identity, env),
-         segment_features <- get_segment_features(segments, identity, override_traits),
+         segment_features <-
+           get_identity_applicable_segments(segments, identity, override_traits),
          prioritized <- clean_segments_by_priority(segment_features),
          replaced <- replace_segment_features(fs, prioritized),
          pre_features <- replace_identity_features(replaced, identity_features),
@@ -97,12 +98,8 @@ defmodule Flagsmith.Engine do
         override_traits \\ []
       ) do
     with identity <- Identity.set_env_key(identity, env),
-         segment_features <- get_segment_features(segments, identity, override_traits),
          segments <-
-           Enum.filter(
-             segment_features,
-             &evaluate_identity_in_segment(identity, &1, override_traits)
-           ),
+           get_identity_applicable_segments(segments, identity, override_traits),
          replaced <- Enum.map(segments, &Segments.IdentitySegment.from_segment/1) do
       replaced
     end
@@ -274,12 +271,12 @@ defmodule Flagsmith.Engine do
   Filters a list of segments accordingly to if they match an identity and traits
   (optionally using a list of traits to override those in the identity)
   """
-  @spec get_segment_features(
+  @spec get_identity_applicable_segments(
           segments :: list(Segments.Segment.t()),
           Identity.t(),
           override_traits :: list(Traits.Trait.t())
         ) :: list(Segments.Segment.t())
-  def get_segment_features(segments, identity, override_traits) do
+  def get_identity_applicable_segments(segments, identity, override_traits) do
     Enum.filter(segments, fn segment ->
       evaluate_identity_in_segment(identity, segment, override_traits)
     end)
