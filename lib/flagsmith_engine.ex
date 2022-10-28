@@ -79,14 +79,14 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
+  Get list of segments for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
   given `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_identity_segments(
           Environment.t(),
           Identity.t(),
           override_traits :: list(Traits.Trait.t())
-        ) :: list(Environment.FeatureState.t())
+        ) :: list(Segments.IdentitySegment.t())
   def get_identity_segments(
         %Environment{
           project: %Environment.Project{segments: segments}
