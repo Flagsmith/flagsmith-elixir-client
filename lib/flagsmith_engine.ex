@@ -1,4 +1,6 @@
 defmodule Flagsmith.Engine do
+  require Logger
+
   alias Flagsmith.Schemas.{
     Environment,
     Traits,
@@ -96,9 +98,11 @@ defmodule Flagsmith.Engine do
       ) do
     with identity <- Identity.set_env_key(identity, env),
          segment_features <- get_segment_features(segments, identity, override_traits),
-         prioritized <- clean_segments_by_priority(segment_features),
          segments <-
-           Enum.filter(prioritized, &evaluate_identity_in_segment(identity, &1, override_traits)),
+           Enum.filter(
+             segment_features,
+             &evaluate_identity_in_segment(identity, &1, override_traits)
+           ),
          replaced <- Enum.map(segments, &Segments.IdentitySegment.from_segment/1) do
       replaced
     end
@@ -579,19 +583,25 @@ defmodule Flagsmith.Engine do
     end
   end
 
-  def trait_match(:MODULO, trait, %Trait.Value{type: type, value: value}) do
+  def trait_match(:MODULO, trait, %Trait.Value{value: value}) do
     with true <- is_binary(trait),
+         %Decimal{} <- value,
          [mod, result] <- String.split(trait, "|"),
-         {mod_val, ""} <- Integer.parse(mod),
-         {result_val, ""} <- Integer.parse(result),
-         :decimal <- type,
-         true <- Decimal.integer?(value),
-         value_integer <- Decimal.to_integer(value) do
-      Integer.mod(value_integer, mod_val) == result_val
+         %Decimal{} = mod_val <- Decimal.new(mod),
+         %Decimal{} = result_val <- Decimal.new(result),
+         %Decimal{} = remainder <- Decimal.rem(value, mod_val) do
+      Decimal.equal?(remainder, result_val)
     else
       _ ->
         false
     end
+  rescue
+    Decimal.Error ->
+      Logger.warn(
+        "invalid MODULO segment rule or trait value :: rule: #{inspect(trait)} :: value: #{inspect(value)}"
+      )
+
+      false
   end
 
   def trait_match(condition, not_cast, %Trait.Value{} = t_value_struct)

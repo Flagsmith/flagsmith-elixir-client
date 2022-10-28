@@ -1,8 +1,7 @@
 defmodule Flagsmith.Schemas.Segments.IdentitySegment do
   use TypedEctoSchema
-  import Ecto.Changeset
 
-  alias Flagsmith.Schemas.Environment
+  alias Flagsmith.Schemas.Segments
 
   @moduledoc """
   Ecto schema representing a Flagsmith Identity Segment.
@@ -14,7 +13,7 @@ defmodule Flagsmith.Schemas.Segments.IdentitySegment do
   end
 
   @doc false
-  @spec from_segment(Flagsmith.Schemas.Segments.Segment.t()) :: __MODULE__.t()
-  def from_segment(%Flagsmith.Schemas.Segments.Segment{id: id, name: name}),
+  @spec from_segment(Segments.Segment.t()) :: __MODULE__.t()
+  def from_segment(%Segments.Segment{id: id, name: name}),
     do: %__MODULE__{id: id, name: name}
 end

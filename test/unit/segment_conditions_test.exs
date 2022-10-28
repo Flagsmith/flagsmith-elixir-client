@@ -63,7 +63,9 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:MODULO, 35.0, "4|3", true},
     {:MODULO, "dummy", "3|0", false},
     {:MODULO, "1.0.0", "3|0", false},
-    {:MODULO, false, "1|3", false}
+    {:MODULO, false, "1|3", false},
+    {:MODULO, 3.5, "1.5|0.5", true},
+    {:MODULO, 4, "1.5|0.5", false}
   ]
 
   test "all conditions" do
@@ -385,8 +387,8 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
   }
 
   test "Segment.Rule IS_SET and IS_NOT_SET" do
-    # test_false is in the inner rule condition, there's two inner conditions for the
-    # it, both equals for false and true, so it should always test true with `ANY`
+    # test that the segment matches (both conditions, IS_SET is true, and
+    # IS_NOT_SET true)
     traits_1 = [
       %Trait{
         trait_key: "test_is_set",
@@ -401,7 +403,25 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
              1
            )
 
+    # test that the segment matches even is the test_is_set trait value is false
     traits_2 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    assert Flagsmith.Engine.traits_match_segment_rule(
+             traits_2,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    # refute because `test_is_not_set` is passed as a trait and so the segment
+    # condition IS_NOT_SET should fail since the segment specifies :ALL for rules
+    # validations
+    traits_3 = [
       %Trait{
         trait_key: "test_is_set",
         trait_value: %Trait.Value{value: true, type: :boolean}
@@ -413,7 +433,27 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     ]
 
     refute Flagsmith.Engine.traits_match_segment_rule(
-             traits_2,
+             traits_3,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    # :IS_NOT_SET should still evaluate to false even if the trait value is `false`
+    # since it's still set
+    traits_4 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_is_not_set",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    refute Flagsmith.Engine.traits_match_segment_rule(
+             traits_4,
              @segment_rule_all_is_or_not_set,
              1,
              1

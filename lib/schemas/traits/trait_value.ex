@@ -65,8 +65,6 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
     end
   end
 
-  def cast(nil), do: {:ok, nil}
-
   def cast(_), do: :error
 
   @impl Ecto.Type
