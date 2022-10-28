@@ -458,5 +458,14 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
              1,
              1
            )
+
+    # :IS_SET should fail since no trait is being passed to match it
+
+    refute Flagsmith.Engine.traits_match_segment_rule(
+             [],
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
   end
 end
