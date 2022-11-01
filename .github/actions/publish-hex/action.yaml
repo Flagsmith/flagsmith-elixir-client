@@ -1,0 +1,6 @@
+name: 'Publish elixir packages to hex.pm'
+description: 'Publish elixir packages to hex.pm'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
