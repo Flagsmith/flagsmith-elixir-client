@@ -2,6 +2,8 @@ on:
   push:
     tags:
       - "*"
+    branches:
+      - "chore/update-actions"
 
 jobs:
   publish:
