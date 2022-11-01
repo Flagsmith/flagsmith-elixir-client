@@ -55,7 +55,17 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:NOT_CONTAINS, "bar", "baz", true},
     {:REGEX, "foo", "[a-z]+", true},
     {:REGEX, "FOO", "[a-z]+", false},
-    {:REGEX, "1.2.3", "\\d", true}
+    {:REGEX, "1.2.3", "\\d", true},
+    {:MODULO, 1, "2|0", false},
+    {:MODULO, 2, "2|0", true},
+    {:MODULO, 3, "2|0", false},
+    {:MODULO, 34.2, "4|3", false},
+    {:MODULO, 35.0, "4|3", true},
+    {:MODULO, "dummy", "3|0", false},
+    {:MODULO, "1.0.0", "3|0", false},
+    {:MODULO, false, "1|3", false},
+    {:MODULO, 3.5, "1.5|0.5", true},
+    {:MODULO, 4, "1.5|0.5", false}
   ]
 
   test "all conditions" do
@@ -353,5 +363,109 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     ]
 
     refute Flagsmith.Engine.traits_match_segment_rule(traits_3, @segment_rule_nested_any, 1, 1)
+  end
+
+  @segment_rule_all_is_or_not_set %Segment.Rule{
+    conditions: [],
+    rules: [
+      %Segment.Rule{
+        conditions: [
+          %Segment.Condition{
+            operator: :IS_SET,
+            property_: "test_is_set"
+          },
+          %Segment.Condition{
+            operator: :IS_NOT_SET,
+            property_: "test_is_not_set"
+          }
+        ],
+        rules: [],
+        type: :ALL
+      }
+    ],
+    type: :ALL
+  }
+
+  test "Segment.Rule IS_SET and IS_NOT_SET" do
+    # test that the segment matches (both conditions, IS_SET is true, and
+    # IS_NOT_SET true)
+    traits_1 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    assert Flagsmith.Engine.traits_match_segment_rule(
+             traits_1,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    # test that the segment matches even is the test_is_set trait value is false
+    traits_2 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    assert Flagsmith.Engine.traits_match_segment_rule(
+             traits_2,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    # refute because `test_is_not_set` is passed as a trait and so the segment
+    # condition IS_NOT_SET should fail since the segment specifies :ALL for rules
+    # validations
+    traits_3 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_is_not_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      }
+    ]
+
+    refute Flagsmith.Engine.traits_match_segment_rule(
+             traits_3,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    # :IS_NOT_SET should still evaluate to false even if the trait value is `false`
+    # since it's still set
+    traits_4 = [
+      %Trait{
+        trait_key: "test_is_set",
+        trait_value: %Trait.Value{value: true, type: :boolean}
+      },
+      %Trait{
+        trait_key: "test_is_not_set",
+        trait_value: %Trait.Value{value: false, type: :boolean}
+      }
+    ]
+
+    refute Flagsmith.Engine.traits_match_segment_rule(
+             traits_4,
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
+
+    # :IS_SET should fail since no trait is being passed to match it
+
+    refute Flagsmith.Engine.traits_match_segment_rule(
+             [],
+             @segment_rule_all_is_or_not_set,
+             1,
+             1
+           )
   end
 end

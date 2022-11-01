@@ -15,6 +15,9 @@ defmodule Flagsmith.Schemas.Types.Operator do
       :LESS_THAN_INCLUSIVE,
       :NOT_EQUAL,
       :CONTAINS,
+      :IS_SET,
+      :IS_NOT_SET,
+      :MODULO,
       :PERCENTAGE_SPLIT
     ]
 end
