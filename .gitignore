@@ -30,3 +30,4 @@ flagsmith_engine-*.tar
 
 .direnv
 .tool-versions
+.vscode/
