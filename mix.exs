@@ -84,7 +84,7 @@ defmodule FlagsmithEngine.MixProject do
     [
       {:tesla, "~> 1.4"},
       {:jason, "~> 1.2"},
-      {:ecto, "~> 3.7.0"},
+      {:ecto, "~> 3.7"},
       {:typed_ecto_schema, "~> 0.3", runtime: false},
       {:typed_enum, "~> 0.1"},
       {:plug_cowboy, "~> 2.0", only: :test, runtime: false},
