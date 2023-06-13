@@ -45,7 +45,7 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get a specific feature state for a given feature_name in a given 
+  Get a specific feature state for a given feature_name in a given
   `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_environment_feature_state(Environment.t(), name :: String.t()) ::
@@ -54,7 +54,7 @@ defmodule Flagsmith.Engine do
     do: Enum.find(fs, fn %{feature: %{name: f_name}} -> f_name == name end)
 
   @doc """
-  Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
+  Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a
   given `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_identity_feature_states(
@@ -82,7 +82,7 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get list of segments for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
+  Get list of segments for a given `t:Flagsmith.Schemas.Identity.t/0` in a
   given `t:Flagsmith.Schemas.Environment.t/0`.
   """
   @spec get_identity_segments(
@@ -348,7 +348,7 @@ defmodule Flagsmith.Engine do
       end
 
     Enum.all?(rules, fn rule ->
-      traits_match_segment_rule(traits, rule, segment_id, Identity.composite_key(identity))
+      traits_match_segment_rule(traits, rule, segment_id, identity.django_id || Identity.composite_key(identity))
     end)
   end
 
@@ -487,7 +487,7 @@ defmodule Flagsmith.Engine do
   defp id_to_string(atom) when is_atom(atom), do: Atom.to_string(atom)
 
   @doc """
-  Given an `t:Flagsmith.Schemas.Types.Operator.t/0`, a cast or uncast segment value, and a cast trait 
+  Given an `t:Flagsmith.Schemas.Types.Operator.t/0`, a cast or uncast segment value, and a cast trait
   value, evaluate if the trait value matches to the segment value.
   """
   @spec trait_match(
