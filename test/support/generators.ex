@@ -245,14 +245,15 @@ defmodule Flagsmith.Engine.Test.Generators do
           identity: nil
         }
       ],
-      identifier: nil,
+      identifier: "identifier",
       traits: [
         %Traits.Trait{
           id: 21_852_859,
           trait_key: "show_popup",
           trait_value: %Value{value: false, type: :boolean}
         }
-      ]
+      ],
+      environment_key: "cU3oztxgvRgZifpLepQJTX"
     }
   end
 
