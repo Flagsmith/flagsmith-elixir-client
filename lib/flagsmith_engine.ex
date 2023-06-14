@@ -348,12 +348,7 @@ defmodule Flagsmith.Engine do
       end
 
     Enum.all?(rules, fn rule ->
-      traits_match_segment_rule(
-        traits,
-        rule,
-        segment_id,
-        identity.django_id || Identity.composite_key(identity)
-      )
+      traits_match_segment_rule(traits, rule, segment_id, Identity.composite_key(identity))
     end)
   end
 
