@@ -1,7 +1,7 @@
 defmodule Flagsmith.EngineTest do
   use ExUnit.Case, async: true
 
-  alias Flagsmith.Schemas.{Environment, Features, Segments, Traits}
+  alias Flagsmith.Schemas.{Environment, Features, Segments, Traits, Identity}
   alias Flagsmith.Engine.Test
 
   # stub the mock so that it calls the normal module as it would under regular usage
@@ -254,6 +254,15 @@ defmodule Flagsmith.EngineTest do
     end
 
     test "get_identity_segments/3", %{env: env, identity: identity} do
+      # Verify that the hash function is called with the composite key
+      # and return a hash that will evaluate as 99.9 (to ensure the identity
+      # is not in the segment defined with a % value of 20 in the segment
+      # defined in the environment as part of test/support/generators.ex).
+      Mox.expect(Flagsmith.Engine.MockHashing, :hash, 3, fn stringed ->
+        assert stringed == "5243,#{Identity.composite_key(identity)}"
+        "270d"
+      end)
+
       # the identity we're using has `show_popup` trait as false by default so
       # it should evaluate as this segment being for this identity when no traits
       # are passed
@@ -299,6 +308,85 @@ defmodule Flagsmith.EngineTest do
 
     test "get_identity_feature_state/4 with non-existing feature", %{env: env, identity: identity} do
       assert nil == Flagsmith.Engine.get_identity_feature_state(env, identity, "non_existing", [])
+    end
+
+    test "evaluate_identity_in_segment/3 uses django id if present", %{identity: identity} do
+      identity = %{identity | django_id: 1}
+
+      segment = %Segments.Segment{
+        feature_states: [],
+        id: 1,
+        name: "percentage_split_segment",
+        rules: [
+          %Segments.Segment.Rule{
+            conditions: [],
+            rules: [
+              %Segments.Segment.Rule{
+                conditions: [
+                  %Segments.Segment.Condition{
+                    operator: :PERCENTAGE_SPLIT,
+                    property_: nil,
+                    value: "1"
+                  }
+                ],
+                rules: [],
+                type: :ANY
+              }
+            ],
+            type: :ALL
+          }
+        ]
+      }
+
+      # Verify that the hash function is called with the django id
+      # and return a hash that will evaluate as 0 (to ensure the identity
+      # is in the segment defined with a % value of 1 above).
+      Mox.expect(Flagsmith.Engine.MockHashing, :hash, fn stringed ->
+        assert stringed == "1,1"
+        "270f"
+      end)
+
+      assert Flagsmith.Engine.evaluate_identity_in_segment(identity, segment, []) == true
+    end
+
+    test "evaluate_identity_in_segment/3 uses composite key if django id not present", %{
+      env: env,
+      identity: identity
+    } do
+      segment = %Segments.Segment{
+        feature_states: [],
+        id: 1,
+        name: "percentage_split_segment",
+        rules: [
+          %Segments.Segment.Rule{
+            conditions: [],
+            rules: [
+              %Segments.Segment.Rule{
+                conditions: [
+                  %Segments.Segment.Condition{
+                    operator: :PERCENTAGE_SPLIT,
+                    property_: nil,
+                    value: "1"
+                  }
+                ],
+                rules: [],
+                type: :ANY
+              }
+            ],
+            type: :ALL
+          }
+        ]
+      }
+
+      # Verify that the hash function is called with the composite key
+      # and return a hash that will evaluate as 0 (to ensure the identity
+      # is in the segment defined with a % value of 1 above).
+      Mox.expect(Flagsmith.Engine.MockHashing, :hash, fn stringed ->
+        assert stringed == "1,#{Identity.composite_key(identity)}"
+        "270f"
+      end)
+
+      assert Flagsmith.Engine.evaluate_identity_in_segment(identity, segment, []) == true
     end
   end
 end
