@@ -350,7 +350,6 @@ defmodule Flagsmith.EngineTest do
     end
 
     test "evaluate_identity_in_segment/3 uses composite key if django id not present", %{
-      env: env,
       identity: identity
     } do
       segment = %Segments.Segment{
