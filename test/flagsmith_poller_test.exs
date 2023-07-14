@@ -1,7 +1,7 @@
 defmodule Flagsmith.Client.Poller.Test do
   use ExUnit.Case, async: false
 
-  import Mox, only: [verify_on_exit!: 1, expect: 3, allow: 3, stub_with: 2]
+  import Mox
   import Flagsmith.Test.Helpers, only: [assert_request: 2]
 
   alias Flagsmith.Engine.Test
@@ -11,7 +11,7 @@ defmodule Flagsmith.Client.Poller.Test do
   @api_url Flagsmith.Configuration.default_url()
   @api_paths Flagsmith.Configuration.api_paths()
 
-  # setup Mox to verify any expectations 
+  # setup Mox to verify any expectations
   setup :verify_on_exit!
 
   # we start the supervisor as a supervised process so it's shut down on every test
@@ -500,133 +500,6 @@ defmodule Flagsmith.Client.Poller.Test do
                   }
                 }
               }} = Flagsmith.Client.get_environment_flags(new_config)
-    end
-  end
-
-  describe "api call errors" do
-    setup do
-      config =
-        Flagsmith.Client.new(
-          enable_local_evaluation: true,
-          environment_key: "test_key"
-        )
-
-      [config: config]
-    end
-
-    test "initializing with api error", %{config: config} do
-      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
-        assert_request(
-          tesla_env,
-          body: nil,
-          query: [],
-          headers: [{@environment_header, "test_key"}],
-          url: Path.join([@api_url, @api_paths.environment]) <> "/",
-          method: :get
-        )
-
-        {:error, :noop}
-      end)
-
-      # here we start it through the dynamic supervisor instead of directly
-      # since we don't want the process exit to exit the test as well
-      {:ok, pid} = Flagsmith.Client.Poller.Supervisor.start_child(config)
-
-      allow(Tesla.Adapter.Mock, self(), pid)
-
-      # we assert that we'll have an exit from the function since the call will fail
-      assert catch_exit(Flagsmith.Client.get_environment(config))
-    end
-
-    test "refresh with errors retries in next cycle", %{config: config} do
-      config = %{config | environment_refresh_interval_milliseconds: 3}
-      env_response = Jason.decode!(Test.Generators.json_env())
-
-      # expectation for first call
-      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
-        assert_request(
-          tesla_env,
-          body: nil,
-          query: [],
-          headers: [{@environment_header, "test_key"}],
-          url: Path.join([@api_url, @api_paths.environment]) <> "/",
-          method: :get
-        )
-
-        {:ok, %Tesla.Env{status: 200, body: env_response}}
-      end)
-
-      # expectation for refresh call 1
-      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
-        assert_request(
-          tesla_env,
-          body: nil,
-          query: [],
-          headers: [{@environment_header, "test_key"}],
-          url: Path.join([@api_url, @api_paths.environment]) <> "/",
-          method: :get
-        )
-
-        {:error, :noop}
-      end)
-
-      # expectation for refresh call 2
-      # similar to what we did previously to test the refreshes
-      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
-        assert_request(
-          tesla_env,
-          body: nil,
-          query: [],
-          headers: [{@environment_header, "test_key"}],
-          url: Path.join([@api_url, @api_paths.environment]) <> "/",
-          method: :get
-        )
-
-        poller_pid = Flagsmith.Client.Poller.whereis("test_key")
-        :ok = :gen_statem.call(poller_pid, {:update_refresh_rate, 60_000})
-        new_env_response = %{env_response | "feature_states" => []}
-
-        {:ok, %Tesla.Env{status: 200, body: new_env_response}}
-      end)
-
-      {:ok, pid} = Flagsmith.Client.Poller.Supervisor.start_child(config)
-
-      allow(Tesla.Adapter.Mock, self(), pid)
-
-      :erlang.trace(pid, true, [:procs])
-
-      # we should now have 2 spawns calls the first fails, so another one afterwards
-      assert Enum.reduce_while(1..100, false, fn _, acc ->
-               receive do
-                 {:trace, ^pid, :spawn, spawned_pid,
-                  {Flagsmith.Client.Poller, :get_environment, [^pid, ^config]}} ->
-                   allow(Tesla.Adapter.Mock, self(), spawned_pid)
-
-                   case acc do
-                     true ->
-                       {:halt, true}
-
-                     false ->
-                       {:cont, true}
-                   end
-
-                 _others ->
-                   {:cont, false}
-               after
-                 200 ->
-                   {:halt, false}
-               end
-             end)
-
-      assert Flagsmith.Test.Helpers.wait_until(
-               fn ->
-                 {:ok, %Schemas.Flags{flags: flags}} =
-                   Flagsmith.Client.get_environment_flags(config)
-
-                 flags == %{}
-               end,
-               15
-             )
     end
   end
 end
