@@ -65,7 +65,18 @@ defmodule Flagsmith.Engine.SegmentConditionsTest do
     {:MODULO, "1.0.0", "3|0", false},
     {:MODULO, false, "1|3", false},
     {:MODULO, 3.5, "1.5|0.5", true},
-    {:MODULO, 4, "1.5|0.5", false}
+    {:MODULO, 4, "1.5|0.5", false},
+    {:IN, "foo", "", false},
+    {:IN, "foo", "foo,bar", true},
+    {:IN, "bar", "foo,bar", true},
+    {:IN, "ba", "foo,bar", false},
+    {:IN, 1, "1,2,3,4", true},
+    {:IN, 1, "", false},
+    {:IN, 1, "1", true},
+    # Flagsmith's engine does not evaluate `IN` condition for floats/doubles and booleans
+    # due to ambiguous serialization across supported platforms.
+    {:IN, 1.5, "1.5", false},
+    {:IN, false, "false", false}
   ]
 
   test "all conditions" do

@@ -28,4 +28,7 @@ flagsmith_engine-*.tar
 # Ignore the dialyzer PLTS
 /priv/plts
 
+# ElixirLS
+.elixir_ls
+
 .vscode/

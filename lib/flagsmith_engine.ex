@@ -442,17 +442,8 @@ defmodule Flagsmith.Engine do
                            trait_value: t_value
                          } ->
       case prop == t_key do
-        true ->
-          case cast_value(t_value, value) do
-            {:ok, casted} ->
-              trait_match(operator, casted, t_value)
-
-            _ ->
-              false
-          end
-
-        _ ->
-          false
+        true -> trait_match(operator, value, t_value)
+        _ -> false
       end
     end)
   end
@@ -580,10 +571,21 @@ defmodule Flagsmith.Engine do
     end
   end
 
-  def trait_match(:MODULO, trait, %Trait.Value{value: value}) do
-    with true <- is_binary(trait),
+  def trait_match(:IN, condition_value, %Trait.Value{type: :string, value: t_value}) do
+    Enum.member?(String.split(condition_value, ","), t_value)
+  end
+
+  def trait_match(:IN, condition_value, %Trait.Value{
+        type: :decimal,
+        value: %Decimal{exp: 0} = t_value
+      }) do
+    Enum.member?(String.split(condition_value, ","), t_value |> Decimal.to_string())
+  end
+
+  def trait_match(:MODULO, condition_value, %Trait.Value{value: value}) do
+    with true <- is_binary(condition_value),
          %Decimal{} <- value,
-         [mod, result] <- String.split(trait, "|"),
+         [mod, result] <- String.split(condition_value, "|"),
          %Decimal{} = mod_val <- Decimal.new(mod),
          %Decimal{} = result_val <- Decimal.new(result),
          %Decimal{} = remainder <- Decimal.rem(value, mod_val) do
@@ -595,7 +597,7 @@ defmodule Flagsmith.Engine do
   rescue
     Decimal.Error ->
       Logger.warn(
-        "invalid MODULO segment rule or trait value :: rule: #{inspect(trait)} :: value: #{inspect(value)}"
+        "invalid MODULO segment rule or trait value :: rule: #{inspect(condition_value)} :: value: #{inspect(value)}"
       )
 
       false
