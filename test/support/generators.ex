@@ -3,7 +3,7 @@ defmodule Flagsmith.Engine.Test.Generators do
   alias Flagsmith.Schemas.Traits.Trait.Value
 
   def json_env() do
-    "{\"api_key\":\"cU3oztxgvRgZifpLepQJTX\",\"feature_states\":[{\"django_id\":72267,\"enabled\":false,\"feature\":{\"id\":13534,\"name\":\"header_size\",\"type\":\"MULTIVARIATE\"},\"feature_state_value\":\"24px\",\"featurestate_uuid\":\"16c5a45c-1d9c-4f44-bebe-5b73d60f897d\",\"multivariate_feature_state_values\":[{\"id\":2915,\"multivariate_feature_option\":{\"id\":849,\"value\":\"34px\"},\"mv_fs_value_uuid\":\"448a7777-91cf-47b0-bf16-a4d566ef7745\",\"percentage_allocation\":60.0}]},{\"django_id\":72269,\"enabled\":false,\"feature\":{\"id\":13535,\"name\":\"body_size\",\"type\":\"STANDARD\"},\"feature_state_value\":\"18px\",\"featurestate_uuid\":\"c3c61a9a-f153-46b2-8e9e-dd80d6529201\",\"multivariate_feature_state_values\":[]},{\"django_id\":92461,\"enabled\": true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"{\\\"colour\\\": \\\"#ababab\\\"}\",\"featurestate_uuid\":\"d6bbf961-1752-4548-97d1-02d60cc1ab44\",\"multivariate_feature_state_values\":[]},{\"django_id\":94235,\"enabled\":true,\"feature\":{\"id\":18382,\"name\":\"test_identity\",\"type\":\"STANDARD\"},\"feature_state_value\":\"very_yes\",\"featurestate_uuid\":\"aa1a4512-b1c7-44d3-a263-c21676852a52\",\"multivariate_feature_state_values\":[]}],\"id\":11278,\"project\":{\"hide_disabled_flags\":false,\"id\":4732,\"name\":\"testing-api\",\"organisation\":{\"feature_analytics\":false,\"id\":4131,\"name\":\"Mr. Bojangles Inc\",\"persist_trait_data\":true,\"stop_serving_flags\":false},\"segments\":[{\"feature_states\":[{\"django_id\":95632,\"enabled\":true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"\",\"featurestate_uuid\":\"3b58d149-fdb3-4815-b537-6583291523dd\",\"multivariate_feature_state_values\":[]}],\"id\":5241,\"name\":\"test_segment\",\"rules\":[{\"conditions\":[],\"rules\":[{\"conditions\":[{\"operator\":\"EQUAL\",\"property_\":\"show_popup\",\"value\":\"false\"}],\"rules\":[],\"type\":\"ANY\"}],\"type\":\"ALL\"}]},{\"feature_states\":[{\"django_id\":95631,\"enabled\":true,\"feature\":{\"id\":17985,\"name\":\"secret_button\",\"type\":\"STANDARD\"},\"feature_state_value\":\"\",\"featurestate_uuid\":\"adb486aa-563d-4b1d-9f72-bf5b210bf94f\",\"multivariate_feature_state_values\":[]}],\"id\":5243,\"name\":\"test_perc\",\"rules\":[{\"conditions\":[],\"rules\":[{\"conditions\":[{\"operator\":\"PERCENTAGE_SPLIT\",\"property_\":\"\",\"value\":\"20\"}],\"rules\":[],\"type\":\"ANY\"}],\"type\":\"ALL\"}]}]}}"
+    File.read!("test/data/environment.json")
   end
 
   def map_env(), do: Jason.decode!(json_env())
@@ -159,7 +159,7 @@ defmodule Flagsmith.Engine.Test.Generators do
             ]
           }
         ]
-      },
+      }
     }
   end
 
@@ -171,7 +171,7 @@ defmodule Flagsmith.Engine.Test.Generators do
 
   def full_identity() do
     %Identity{
-      flags: [
+      identity_features: [
         %Features.FeatureState{
           enabled: false,
           environment: 11278,

@@ -177,8 +177,9 @@ defmodule Flagsmith.Client do
 
     case Tesla.post(http_client(config), @api_paths.identities, query) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        with %Schemas.Identity{flags: flags} <- Schemas.Identity.from_response(body),
-             flags <- build_flags(flags, config) do
+        with %Schemas.Identity{identity_features: identity_features} <-
+               Schemas.Identity.from_response(body),
+             flags <- build_flags(identity_features, config) do
           {:ok, flags}
         else
           error ->

@@ -456,6 +456,37 @@ defmodule Flagsmith.Client.Poller.Test do
                  %{trait_key: "show_popup", trait_value: false}
                ])
 
+      # finally, verify that identity overrides work correctly
+      assert {:ok,
+              %Flagsmith.Schemas.Flags{
+                __configuration__: %Flagsmith.Configuration{},
+                flags: %{
+                  "body_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "body_size",
+                    value: "18px"
+                  },
+                  "header_size" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "header_size",
+                    value: "34px"
+                  },
+                  "secret_button" => %Flagsmith.Schemas.Flag{
+                    enabled: true,
+                    feature_name: "secret_button",
+                    value: nil
+                  },
+                  "test_identity" => %Flagsmith.Schemas.Flag{
+                    enabled: false,
+                    feature_name: "test_identity",
+                    value: "some-overridden-value"
+                  }
+                }
+              }} =
+               Flagsmith.Client.get_identity_flags(config, "overridden-id", [
+                 %{trait_key: "show_popup", trait_value: false}
+               ])
+
       # sanity check that nowhere did the poller process exit/crash
       assert ^pid = Flagsmith.Client.Poller.whereis(config.environment_key)
     end

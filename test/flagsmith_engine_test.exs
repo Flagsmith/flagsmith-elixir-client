@@ -169,7 +169,7 @@ defmodule Flagsmith.EngineTest do
                     ]
                   }
                 ]
-              },
+              }
             } = parsed} = Flagsmith.Engine.parse_environment(env_map)
 
     assert env_map_2 = Test.Generators.json_env()
