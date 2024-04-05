@@ -10,11 +10,8 @@ defmodule Flagsmith.Schemas.Environment do
   typed_embedded_schema do
     field(:api_key, :string)
     embeds_many(:feature_states, __MODULE__.FeatureState)
+    embeds_many(:identity_overrides, Flagsmith.Schemas.Identity)
     embeds_one(:project, __MODULE__.Project)
-    embeds_one(:amplitude_config, __MODULE__.Integration)
-    embeds_one(:segment_config, __MODULE__.Integration)
-    embeds_one(:mixpanel_config, __MODULE__.Integration)
-    embeds_one(:heap_config, __MODULE__.Integration)
 
     field(:__configuration__, :map)
   end
@@ -26,11 +23,8 @@ defmodule Flagsmith.Schemas.Environment do
     struct
     |> cast(params, [:api_key, :id])
     |> cast_embed(:feature_states)
+    |> cast_embed(:identity_overrides)
     |> cast_embed(:project)
-    |> cast_embed(:amplitude_config)
-    |> cast_embed(:segment_config)
-    |> cast_embed(:mixpanel_config)
-    |> cast_embed(:heap_config)
   end
 
   @doc false

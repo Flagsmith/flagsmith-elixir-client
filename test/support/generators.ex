@@ -10,7 +10,6 @@ defmodule Flagsmith.Engine.Test.Generators do
 
   def full_env() do
     %Environment{
-      amplitude_config: nil,
       api_key: "cU3oztxgvRgZifpLepQJTX",
       feature_states: [
         %Environment.FeatureState{
@@ -72,9 +71,7 @@ defmodule Flagsmith.Engine.Test.Generators do
           multivariate_feature_state_values: []
         }
       ],
-      heap_config: nil,
       id: 11278,
-      mixpanel_config: nil,
       project: %Environment.Project{
         hide_disabled_flags: false,
         id: 4732,
@@ -163,7 +160,6 @@ defmodule Flagsmith.Engine.Test.Generators do
           }
         ]
       },
-      segment_config: nil
     }
   end
 

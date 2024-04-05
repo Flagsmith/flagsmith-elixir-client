@@ -20,7 +20,6 @@ defmodule Flagsmith.EngineTest do
     assert {:ok,
             %Environment{
               __configuration__: nil,
-              amplitude_config: nil,
               api_key: "cU3oztxgvRgZifpLepQJTX",
               feature_states: [
                 %Environment.FeatureState{
@@ -82,9 +81,7 @@ defmodule Flagsmith.EngineTest do
                   multivariate_feature_state_values: []
                 }
               ],
-              heap_config: nil,
               id: 11278,
-              mixpanel_config: nil,
               project: %Environment.Project{
                 hide_disabled_flags: false,
                 id: 4732,
@@ -173,7 +170,6 @@ defmodule Flagsmith.EngineTest do
                   }
                 ]
               },
-              segment_config: nil
             } = parsed} = Flagsmith.Engine.parse_environment(env_map)
 
     assert env_map_2 = Test.Generators.json_env()
