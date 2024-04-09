@@ -67,7 +67,7 @@ defmodule Flagsmith.Engine do
           feature_states: fs,
           project: %Environment.Project{segments: segments}
         } = env,
-        %Identity{flags: identity_features} = identity,
+        %Identity{identity_features: identity_features} = identity,
         override_traits \\ []
       ) do
     with identity <- Identity.set_env_key(identity, env),

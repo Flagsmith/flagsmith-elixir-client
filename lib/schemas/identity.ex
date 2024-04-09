@@ -12,7 +12,7 @@ defmodule Flagsmith.Schemas.Identity do
     field(:django_id, :integer)
     field(:identifier, :string)
     field(:environment_key, :string)
-    embeds_many(:flags, Flagsmith.Schemas.Features.FeatureState)
+    embeds_many(:identity_features, Flagsmith.Schemas.Features.FeatureState)
     embeds_many(:traits, Flagsmith.Schemas.Traits.Trait)
   end
 
@@ -24,7 +24,7 @@ defmodule Flagsmith.Schemas.Identity do
     |> cast(params, [:identifier, :environment_key, :django_id])
     |> validate_required([:identifier])
     |> cast_embed(:traits)
-    |> cast_embed(:flags)
+    |> cast_embed(:identity_features)
   end
 
   @doc false
@@ -43,16 +43,14 @@ defmodule Flagsmith.Schemas.Identity do
   @doc false
   @spec from_response(element :: map() | list(map())) :: __MODULE__.t() | any()
   def from_response(element) when is_map(element) do
-    element
+    Map.put(element, "identity_features", Map.get(element, "flags"))
     |> changeset()
     |> apply_changes()
   end
 
   def from_response(elements) when is_list(elements) do
     Enum.map(elements, fn element ->
-      element
-      |> changeset()
-      |> apply_changes()
+      from_response(element)
     end)
   end
 

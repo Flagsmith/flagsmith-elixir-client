@@ -18,7 +18,8 @@ defmodule Flagsmith.Client.Poller do
     :configuration,
     :environment,
     :refresh,
-    :refresh_monitor
+    :refresh_monitor,
+    identities_with_overrides: %{}
   ]
 
   #################################
@@ -114,9 +115,17 @@ defmodule Flagsmith.Client.Poller do
 
   def handle_event({:call, from}, {:get_identity_flags, identifier, traits}, _, %__MODULE__{
         environment: env,
-        configuration: config
+        configuration: config,
+        identities_with_overrides: overrides
       }) do
-    identity = Schemas.Identity.from_id_traits(identifier, traits, env.api_key)
+    identity =
+      case Map.get(overrides, identifier) do
+        nil ->
+          Schemas.Identity.from_id_traits(identifier, traits, env.api_key)
+
+        existing ->
+          %Schemas.Identity{existing | traits: Flagsmith.Schemas.Traits.Trait.from(traits)}
+      end
 
     flags =
       env
@@ -148,7 +157,7 @@ defmodule Flagsmith.Client.Poller do
   def handle_event(:internal, :initial_load, :loading, %__MODULE__{configuration: config} = data) do
     case Flagsmith.Client.get_environment_request(config) do
       {:ok, environment} ->
-        {:next_state, :on, %__MODULE__{data | environment: environment},
+        {:next_state, :on, update_data(data, environment),
          [{:next_event, :internal, :set_refresh}]}
 
       error ->
@@ -209,7 +218,7 @@ defmodule Flagsmith.Client.Poller do
   # a process other than the one we have stored under the `:refresh_monitor` key
   # we still make sure it's matching.
   #
-  # Then we just check if the response is an `:ok` tuple with an `Environment.t` 
+  # Then we just check if the response is an `:ok` tuple with an `Environment.t`
   # we replace the `:environment` key on our statem data and following user queries
   # will receive the new env or flags. If not we let it stay as is.
   #
@@ -222,8 +231,7 @@ defmodule Flagsmith.Client.Poller do
       ) do
     case result do
       {:ok, %Schemas.Environment{} = env} ->
-        {:keep_state, %{data | refresh_monitor: nil, environment: env},
-         [{:next_event, :internal, :set_refresh}]}
+        {:keep_state, update_data(data, env), [{:next_event, :internal, :set_refresh}]}
 
       error ->
         Logger.error(
@@ -250,6 +258,21 @@ defmodule Flagsmith.Client.Poller do
       end
 
     %__MODULE__{configuration: config, refresh: refresh_milliseconds}
+  end
+
+  # Update identities with overrides along with the environment.
+  defp update_data(data, environment) do
+    %__MODULE__{
+      data
+      | refresh_monitor: nil,
+        environment: environment,
+        identities_with_overrides:
+          Enum.reduce(
+            environment.identity_overrides,
+            %{},
+            fn identity, acc -> Map.put(acc, identity.identifier, identity) end
+          )
+    }
   end
 
   @doc false
