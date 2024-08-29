@@ -152,28 +152,30 @@ defmodule Flagsmith.Client do
   @spec get_identity_flags(
           Configuration.t() | Keyword.t(),
           String.t(),
-          list(map() | Schemas.Traits.Trait.t())
+          list(map() | Schemas.Traits.Trait.t()),
+          boolean()
         ) ::
           {:ok, Schemas.Flags.t()} | {:error, term()}
-  def get_identity_flags(configuration_or_opts \\ [], identifier, traits)
+  def get_identity_flags(configuration_or_opts \\ [], identifier, traits, transient \\ false)
 
   def get_identity_flags(
         %Configuration{enable_local_evaluation: local?} = config,
         identifier,
-        traits
+        traits,
+        transient
       ) do
     case local? do
       true -> Flagsmith.Client.Poller.get_identity_flags(config, identifier, traits)
-      false -> get_identity_flags_request(config, identifier, traits)
+      false -> get_identity_flags_request(config, identifier, traits, transient)
     end
   end
 
-  def get_identity_flags(opts, identifier, traits) when is_list(opts),
-    do: get_identity_flags(new(opts), identifier, traits)
+  def get_identity_flags(opts, identifier, traits, transient) when is_list(opts),
+    do: get_identity_flags(new(opts), identifier, traits, transient)
 
   @doc false
-  def get_identity_flags_request(%Configuration{} = config, identifier, traits) do
-    query = build_identity_params(identifier, traits)
+  def get_identity_flags_request(%Configuration{} = config, identifier, traits, transient) do
+    query = build_identity_params(identifier, traits, transient)
 
     case Tesla.post(http_client(config), @api_paths.identities, query) do
       {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
@@ -375,15 +377,16 @@ defmodule Flagsmith.Client do
     feature_flag
   end
 
-  defp build_identity_params(identifier, [_ | _] = traits) do
+  defp build_identity_params(identifier, [_ | _] = traits, transient) do
     %{
       identifier: identifier,
-      traits: Schemas.Traits.Trait.from(traits)
+      traits: Schemas.Traits.Trait.from(traits),
+      transient: transient
     }
   end
 
-  defp build_identity_params(identifier, _),
-    do: %{identifier: identifier}
+  defp build_identity_params(identifier, _, transient),
+    do: %{identifier: identifier, transient: transient}
 
   @doc false
   @spec auth_middleware(environment_key :: String.t()) ::
