@@ -269,7 +269,7 @@ defmodule Flagsmith.Client.Test do
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         assert_request(
           tesla_env,
-          body: "{\"identifier\":\"super1234324\"}",
+          body: "{\"transient\":false,\"identifier\":\"super1234324\"}",
           query: [],
           headers: [{@environment_header, config.environment_key}],
           url: Path.join([@api_url, @api_paths.identities]) <> "/",
@@ -314,6 +314,50 @@ defmodule Flagsmith.Client.Test do
 
       # we also assert that no poller was initiated by making sure there's no pid
       assert :undefined = Flagsmith.Client.Poller.whereis(config.environment_key)
+    end
+
+    test "get_identity_flags for transient identity", %{config: config} do
+      # set expectation for the http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body: "{\"transient\":true,\"identifier\":\"super1234324\"}",
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.identities]) <> "/",
+          method: :post
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_identity()}}
+      end)
+
+      Flagsmith.Client.get_identity_flags(config, "super1234324", [], true)
+    end
+
+    test "get_identity_flags for transient traits", %{config: config} do
+      # set expectation for the http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          body:
+            "{\"transient\":false,\"identifier\":\"super1234324\",\"traits\":[{\"trait_key\":\"foo\",\"trait_value\":{\"value\":\"bar\",\"type\":\"string\"},\"transient\":false},{\"trait_key\":\"transient\",\"trait_value\":{\"value\":\"bar\",\"type\":\"string\"},\"transient\":true}]}",
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.identities]) <> "/",
+          method: :post
+        )
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_identity()}}
+      end)
+
+      Flagsmith.Client.get_identity_flags(
+        config,
+        "super1234324",
+        [
+          %{trait_key: "foo", trait_value: "bar"},
+          %{trait_key: "transient", trait_value: "bar", transient: true}
+        ]
+      )
     end
   end
 

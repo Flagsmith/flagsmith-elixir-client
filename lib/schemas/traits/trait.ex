@@ -8,12 +8,13 @@ defmodule Flagsmith.Schemas.Traits.Trait do
   Ecto schema representing a Flagsmith trait definition.
   """
 
-  @derive {Jason.Encoder, only: [:trait_key, :trait_value]}
+  @derive {Jason.Encoder, only: [:trait_key, :trait_value, :transient]}
 
   @primary_key {:id, :id, autogenerate: false}
   typed_embedded_schema do
     field(:trait_key, :string)
     field(:trait_value, __MODULE__.Value)
+    field(:transient, :boolean, default: false)
   end
 
   @doc false
@@ -44,7 +45,7 @@ defmodule Flagsmith.Schemas.Traits.Trait do
 
   def from(%{} = params) do
     %__MODULE__{}
-    |> cast(params, [:trait_value, :trait_key, :id])
+    |> cast(params, [:trait_value, :trait_key, :transient, :id])
     |> validate_required([:trait_value])
     |> apply_changes()
   end
