@@ -14,12 +14,12 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         submodules: 'true'
 
     - name: Set up Elixir
-      uses: erlef/setup-beam@v1.15.4
+      uses: erlef/setup-beam@v1
       with:
         version-file: .tool-versions
         version-type: strict
@@ -29,7 +29,7 @@ jobs:
       shell: bash
 
     - name: Restore dependencies cache
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: deps
         key: ${{ runner.os }}-deps-${{ env.MIX_LOCK_HASH }}
@@ -39,7 +39,7 @@ jobs:
       run: mix deps.get
 
     - name: Restore build artifacts
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: _build
         key: ${{ runner.os }}-build-${{ env.MIX_LOCK_HASH }}
@@ -52,7 +52,7 @@ jobs:
       run: mix test
 
     - name: Restore dialyzer PLTS
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: priv/plts
         key: ${{ runner.os }}-plts-${{ env.MIX_LOCK_HASH }}
