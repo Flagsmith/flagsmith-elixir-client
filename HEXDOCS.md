@@ -38,7 +38,7 @@ config :flagsmith_engine, :configuration,
        default_flag_handler: function_defaults_to_not_found,
        custom_headers: [{"to add to", "the requests"}],
        request_timeout_milliseconds: 5000,
-       enabled_local_evaluation: false,
+       enable_local_evaluation: false,
        environment_refresh_interval_milliseconds: 60_000,
        retries: 0,
        enable_analytics: false
@@ -77,7 +77,7 @@ To enable analytics or local evaluation, besides setting the configuration keys 
 defmodule YourAppWeb.Application do
 
    # ...
-   
+
    def start(_type, _args) do
      children = [
        Flagsmith.Supervisor,
@@ -87,7 +87,7 @@ defmodule YourAppWeb.Application do
      opts = [strategy: :one_for_one, name: YourAppWeb.Supervisor]
      Supervisor.start_link(children, opts)
    end
-  
+
    # ...
 ```
 
@@ -201,4 +201,4 @@ And obviously, if the identity has that trait and you do the regular API call wi
 
 - `retries` -> the number of times the http adapter is allowed to retry failed calls to the Flagsmith API before deeming the response failed. Keep in mind that with local_evaluation and analytics, even if the requests fail after whatever number of retries you set here, they will keep being retried as their time-cycle resets (for the poller whatever is the environment_refresh_interval_milliseconds, for the analytics they're batched, and a dump is tried every 1 minute)
 
-- `enable_analytics` -> track feature queries by reporting automatically to the Flagsmith API analytics endpoint queries and lookups to features. This only works when using the `Flagsmith.Client` module functions such as `is_feature_enabled`, `get_feature_value` and `get_flag`. 
+- `enable_analytics` -> track feature queries by reporting automatically to the Flagsmith API analytics endpoint queries and lookups to features. This only works when using the `Flagsmith.Client` module functions such as `is_feature_enabled`, `get_feature_value` and `get_flag`.
