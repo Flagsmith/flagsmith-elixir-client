@@ -32,3 +32,5 @@ flagsmith_engine-*.tar
 .elixir_ls
 
 .vscode/
+
+.envrc
