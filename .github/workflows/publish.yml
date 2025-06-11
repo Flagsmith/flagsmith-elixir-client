@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "*"
+    branches:
+      - "ci/test-deploy"
 
 jobs:
   publish:
