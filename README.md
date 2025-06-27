@@ -1,5 +1,3 @@
-![Flagsmith Screenshot](https://github.com/Flagsmith/flagsmith/raw/main/static-files/hero.png)
-
 # Flagsmith Elixir SDK
 
 > Flagsmith allows you to manage feature flags and remote config across multiple projects, environments and organisations.
