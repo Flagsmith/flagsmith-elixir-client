@@ -439,17 +439,20 @@ defmodule Flagsmith.Client.Test do
   end
 
   describe "User-Agent header" do
-    test "user_agent/0 returns valid semver version" do
-      user_agent = Flagsmith.Client.user_agent()
-      version_part = String.replace_prefix(user_agent, "flagsmith-elixir-sdk/", "")
+    test "user_agent/0 returns expected version" do
+      # x-release-please-start-version
+      expected_version = "2.2.1"
+      # x-release-please-end
 
-      assert {:ok, parsed} = Version.parse(version_part)
-      assert is_integer(parsed.major) and parsed.major >= 0
-      assert is_integer(parsed.minor) and parsed.minor >= 0
-      assert is_integer(parsed.patch) and parsed.patch >= 0
+      user_agent = Flagsmith.Client.user_agent()
+      assert user_agent == "flagsmith-elixir-sdk/#{expected_version}"
     end
 
-    test "HTTP client includes User-Agent header with valid semver", %{config: config} do
+    test "HTTP client includes User-Agent header", %{config: config} do
+      # x-release-please-start-version
+      expected_version = "2.2.1"
+      # x-release-please-end
+
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
         user_agent_header =
           Enum.find(tesla_env.headers, fn {header, _} ->
@@ -459,8 +462,7 @@ defmodule Flagsmith.Client.Test do
         assert user_agent_header != nil
         {_header, user_agent_value} = user_agent_header
 
-        version_part = String.replace_prefix(user_agent_value, "flagsmith-elixir-sdk/", "")
-        assert {:ok, _} = Version.parse(version_part)
+        assert user_agent_value == "flagsmith-elixir-sdk/#{expected_version}"
 
         {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
       end)
