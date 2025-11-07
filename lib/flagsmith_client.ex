@@ -11,10 +11,10 @@ defmodule Flagsmith.Client do
   @doc false
   @spec user_agent() :: String.t()
   def user_agent do
-    case Application.spec(:flagsmith_engine, :vsn) do
-      nil -> "flagsmith-elixir-sdk/unknown"
-      vsn -> "flagsmith-elixir-sdk/#{vsn}"
-    end
+    # x-release-please-start-version
+    version = "2.3.0"
+    # x-release-please-end
+    "flagsmith-elixir-sdk/#{version}"
   end
 
   @doc """

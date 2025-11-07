@@ -439,15 +439,6 @@ defmodule Flagsmith.Client.Test do
   end
 
   describe "User-Agent header" do
-    test "user_agent/0 returns expected version" do
-      # x-release-please-start-version
-      expected_version = "2.3.0"
-      # x-release-please-end
-
-      user_agent = Flagsmith.Client.user_agent()
-      assert user_agent == "flagsmith-elixir-sdk/#{expected_version}"
-    end
-
     test "HTTP client includes User-Agent header", %{config: config} do
       # x-release-please-start-version
       expected_version = "2.3.0"

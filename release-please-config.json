@@ -10,6 +10,7 @@
             "prerelease": false,
             "include-component-in-tag": false,
             "extra-files": [
+                "lib/flagsmith_client.ex",
                 "test/flagsmith_client_test.exs"
             ]
         }
