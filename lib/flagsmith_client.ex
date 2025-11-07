@@ -8,6 +8,15 @@ defmodule Flagsmith.Client do
   @type tesla_header_list :: [{String.t(), String.t()}]
   @type config_or_env :: Configuration.t() | Keyword.t() | Schemas.Environment.t()
 
+  @doc false
+  @spec user_agent() :: String.t()
+  def user_agent do
+    case Application.spec(:flagsmith_engine, :vsn) do
+      nil -> "flagsmith-elixir-sdk/unknown"
+      vsn -> "flagsmith-elixir-sdk/#{vsn}"
+    end
+  end
+
   @doc """
   Create a `t:Flagsmith.Configuration.t/0` struct with the desired settings to use
   in requests.
@@ -31,6 +40,7 @@ defmodule Flagsmith.Client do
     Tesla.client([
       base_url_middleware(api_url),
       auth_middleware(environment_key),
+      user_agent_middleware(),
       Tesla.Middleware.JSON,
       {Tesla.Middleware.Retry, max_retries: retries},
       {Tesla.Middleware.Headers, custom_headers},
@@ -393,6 +403,12 @@ defmodule Flagsmith.Client do
           {Tesla.Middleware.Headers, tesla_header_list()}
   def auth_middleware(environment_key),
     do: {Tesla.Middleware.Headers, auth_header(environment_key)}
+
+  @doc false
+  @spec user_agent_middleware() ::
+          {Tesla.Middleware.Headers, tesla_header_list()}
+  def user_agent_middleware(),
+    do: {Tesla.Middleware.Headers, [{"user-agent", user_agent()}]}
 
   @doc false
   @spec base_url_middleware(base_url :: String.t()) ::
