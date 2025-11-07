@@ -437,4 +437,35 @@ defmodule Flagsmith.Client.Test do
                Flagsmith.Client.get_flag(new_config, "some_flag")
     end
   end
+
+  describe "User-Agent header" do
+    test "user_agent/0 returns valid semver version" do
+      user_agent = Flagsmith.Client.user_agent()
+      version_part = String.replace_prefix(user_agent, "flagsmith-elixir-sdk/", "")
+
+      assert {:ok, parsed} = Version.parse(version_part)
+      assert is_integer(parsed.major) and parsed.major >= 0
+      assert is_integer(parsed.minor) and parsed.minor >= 0
+      assert is_integer(parsed.patch) and parsed.patch >= 0
+    end
+
+    test "HTTP client includes User-Agent header with valid semver", %{config: config} do
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        user_agent_header =
+          Enum.find(tesla_env.headers, fn {header, _} ->
+            header == "user-agent"
+          end)
+
+        assert user_agent_header != nil
+        {_header, user_agent_value} = user_agent_header
+
+        version_part = String.replace_prefix(user_agent_value, "flagsmith-elixir-sdk/", "")
+        assert {:ok, _} = Version.parse(version_part)
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+      end)
+
+      Flagsmith.Client.get_environment(config)
+    end
+  end
 end
