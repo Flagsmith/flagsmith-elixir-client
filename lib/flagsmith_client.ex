@@ -12,7 +12,7 @@ defmodule Flagsmith.Client do
   @spec user_agent() :: String.t()
   def user_agent do
     # x-release-please-start-version
-    version = "2.3.0"
+    version = "2.3.1"
     # x-release-please-end
     "flagsmith-elixir-sdk/#{version}"
   end
