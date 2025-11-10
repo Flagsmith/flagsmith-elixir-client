@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.0...v2.3.1) (2025-11-10)
+
+
+### Refactoring
+
+* use release-please markers for version instead of Application.spec ([#51](https://github.com/Flagsmith/flagsmith-elixir-client/issues/51)) ([6abdc93](https://github.com/Flagsmith/flagsmith-elixir-client/commit/6abdc93d91514d444749a8e1744b27a8f57064e0))
+
 ## [2.3.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.2.1...v2.3.0) (2025-11-07)
 
 

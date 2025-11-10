@@ -441,7 +441,7 @@ defmodule Flagsmith.Client.Test do
   describe "User-Agent header" do
     test "HTTP client includes User-Agent header", %{config: config} do
       # x-release-please-start-version
-      expected_version = "2.3.0"
+      expected_version = "2.3.1"
       # x-release-please-end
 
       expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
