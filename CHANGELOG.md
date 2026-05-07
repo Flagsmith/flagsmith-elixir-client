@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.2](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.1...v2.3.2) (2026-05-07)
+
+
+### CI
+
+* setup Renovate for engine-test-data tracking ([#56](https://github.com/Flagsmith/flagsmith-elixir-client/issues/56)) ([60090c0](https://github.com/Flagsmith/flagsmith-elixir-client/commit/60090c066b654d31ea3b1699d73d71087423a152))
+
+
+### Other
+
+* Remove amannn/action-semantic-pull-request workflow ([#53](https://github.com/Flagsmith/flagsmith-elixir-client/issues/53)) ([19414f3](https://github.com/Flagsmith/flagsmith-elixir-client/commit/19414f36fc54e4e9c40dd7e4aabb1fe6986e2cd1))
+
 ## [2.3.1](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.0...v2.3.1) (2025-11-10)
 
 
