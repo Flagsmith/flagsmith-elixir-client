@@ -340,7 +340,7 @@ defmodule Flagsmith.Client.Test do
         assert_request(
           tesla_env,
           body:
-            "{\"transient\":false,\"identifier\":\"super1234324\",\"traits\":[{\"trait_key\":\"foo\",\"trait_value\":{\"value\":\"bar\",\"type\":\"string\"},\"transient\":false},{\"trait_key\":\"transient\",\"trait_value\":{\"value\":\"bar\",\"type\":\"string\"},\"transient\":true}]}",
+            "{\"transient\":false,\"identifier\":\"super1234324\",\"traits\":[{\"trait_key\":\"foo\",\"trait_value\":\"bar\",\"transient\":false},{\"trait_key\":\"transient\",\"trait_value\":\"bar\",\"transient\":true}]}",
           query: [],
           headers: [{@environment_header, config.environment_key}],
           url: Path.join([@api_url, @api_paths.identities]) <> "/",
@@ -356,6 +356,52 @@ defmodule Flagsmith.Client.Test do
         [
           %{trait_key: "foo", trait_value: "bar"},
           %{trait_key: "transient", trait_value: "bar", transient: true}
+        ]
+      )
+    end
+
+    test "get_identity_flags sends trait values as plain JSON values", %{config: config} do
+      # set expectation for the http call
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        assert_request(
+          tesla_env,
+          query: [],
+          headers: [{@environment_header, config.environment_key}],
+          url: Path.join([@api_url, @api_paths.identities]) <> "/",
+          method: :post
+        )
+
+        # compare with === so that e.g. 30 and 30.0 aren't considered equal
+        assert Jason.decode!(tesla_env.body) === %{
+                 "identifier" => "super1234324",
+                 "transient" => false,
+                 "traits" => [
+                   %{"trait_key" => "plan", "trait_value" => "premium", "transient" => false},
+                   %{"trait_key" => "age", "trait_value" => 30, "transient" => false},
+                   %{"trait_key" => "score", "trait_value" => 4.5, "transient" => false},
+                   %{"trait_key" => "rating", "trait_value" => 2.0, "transient" => false},
+                   %{"trait_key" => "balance", "trait_value" => 10.25, "transient" => false},
+                   %{"trait_key" => "subscribed", "trait_value" => true, "transient" => false},
+                   %{"trait_key" => "beta", "trait_value" => false, "transient" => false},
+                   %{"trait_key" => "version", "trait_value" => "1.2.3", "transient" => false}
+                 ]
+               }
+
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_identity()}}
+      end)
+
+      Flagsmith.Client.get_identity_flags(
+        config,
+        "super1234324",
+        [
+          %{trait_key: "plan", trait_value: "premium"},
+          %{trait_key: "age", trait_value: 30},
+          %{trait_key: "score", trait_value: 4.5},
+          %{trait_key: "rating", trait_value: 2.0},
+          %{trait_key: "balance", trait_value: Decimal.new("10.25")},
+          %{trait_key: "subscribed", trait_value: true},
+          %{trait_key: "beta", trait_value: false},
+          %{trait_key: "version", trait_value: "1.2.3:semver"}
         ]
       )
     end
