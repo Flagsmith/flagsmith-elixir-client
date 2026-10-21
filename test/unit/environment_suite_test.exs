@@ -7,7 +7,7 @@ defmodule Flagsmith.Engine.EnvironmentSuite.Test do
 
   @path Path.join([
           File.cwd!(),
-          "test/support/engine-test-data/data/environment_n9fbf9h3v4fFgH3U3ngWhb.json"
+          "test/data/environment_n9fbf9h3v4fFgH3U3ngWhb.json"
         ])
 
   @json_env @path |> File.read!() |> Jason.decode!()

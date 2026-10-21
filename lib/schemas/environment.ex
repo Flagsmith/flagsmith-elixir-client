@@ -9,6 +9,7 @@ defmodule Flagsmith.Schemas.Environment do
   @primary_key {:id, :id, autogenerate: false}
   typed_embedded_schema do
     field(:api_key, :string)
+    field(:name, :string)
     embeds_many(:feature_states, __MODULE__.FeatureState)
     embeds_many(:identity_overrides, Flagsmith.Schemas.Identity)
     embeds_one(:project, __MODULE__.Project)
@@ -21,7 +22,7 @@ defmodule Flagsmith.Schemas.Environment do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [:api_key, :id])
+    |> cast(params, [:api_key, :id, :name])
     |> cast_embed(:feature_states)
     |> cast_embed(:identity_overrides)
     |> cast_embed(:project)
