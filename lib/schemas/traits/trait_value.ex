@@ -21,8 +21,6 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
           :type => :string | :decimal | :boolean | :semver
         }
 
-  @derive {Jason.Encoder, only: [:value, :type]}
-
   @enforce_keys [:value, :type]
   defstruct [:value, :type]
 
@@ -136,4 +134,16 @@ defmodule Flagsmith.Schemas.Traits.Trait.Value do
 
     {:ok, %__MODULE__{value: semver, type: :semver}}
   end
+end
+
+defimpl Jason.Encoder, for: Flagsmith.Schemas.Traits.Trait.Value do
+  # The Flagsmith API expects `trait_value` to be a plain JSON value, so only the
+  # value is encoded, keeping its JSON type.
+  def encode(%{value: value}, opts), do: Jason.Encode.value(to_json_value(value), opts)
+
+  # Jason encodes decimals as strings; send them as integers or floats instead.
+  defp to_json_value(%Decimal{exp: exp} = value) when exp >= 0, do: Decimal.to_integer(value)
+  defp to_json_value(%Decimal{} = value), do: Decimal.to_float(value)
+  defp to_json_value(%Version{} = value), do: Version.to_string(value)
+  defp to_json_value(value), do: value
 end
