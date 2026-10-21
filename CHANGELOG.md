@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.3.2](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.1...v2.3.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* Send identity trait values as plain JSON values ([#60](https://github.com/Flagsmith/flagsmith-elixir-client/issues/60)) ([f259ff8](https://github.com/Flagsmith/flagsmith-elixir-client/commit/f259ff8a6b9ba5500fb921b3355116eacf3be89f))
+
+
+### CI
+
+* Label Renovate's SDK spec bump PRs ([#62](https://github.com/Flagsmith/flagsmith-elixir-client/issues/62)) ([77b5e9a](https://github.com/Flagsmith/flagsmith-elixir-client/commit/77b5e9a44e6f6da13d171a60021bd88b871b3f47))
+* Run the Flagsmith SDK behavioural spec ([#61](https://github.com/Flagsmith/flagsmith-elixir-client/issues/61)) ([45b5617](https://github.com/Flagsmith/flagsmith-elixir-client/commit/45b56173537a21a834acdfa3b9733bbd31ebdeca))
+* setup Renovate for engine-test-data tracking ([#56](https://github.com/Flagsmith/flagsmith-elixir-client/issues/56)) ([60090c0](https://github.com/Flagsmith/flagsmith-elixir-client/commit/60090c066b654d31ea3b1699d73d71087423a152))
+
+
+### Other
+
+* Remove amannn/action-semantic-pull-request workflow ([#53](https://github.com/Flagsmith/flagsmith-elixir-client/issues/53)) ([19414f3](https://github.com/Flagsmith/flagsmith-elixir-client/commit/19414f36fc54e4e9c40dd7e4aabb1fe6986e2cd1))
+
 ## [2.3.1](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.0...v2.3.1) (2025-11-10)
 
 
