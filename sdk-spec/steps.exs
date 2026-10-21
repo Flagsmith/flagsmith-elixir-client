@@ -11,7 +11,7 @@ defmodule SDKSpec.Steps do
     end
   end
 
-  # Given an SDK client for the environment
+  # Create the SDK client
   def create_client(environment_key, api_url) do
     Client.new(environment_key: environment_key, api_url: api_url)
   end
