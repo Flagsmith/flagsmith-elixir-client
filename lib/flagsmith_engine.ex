@@ -13,6 +13,7 @@ defmodule Flagsmith.Engine do
   alias Flagsmith.Engine.{Evaluator, Mappers}
   alias Flagsmith.Schemas.Types
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
+  @prepared_environment_key {__MODULE__, :prepared_environment}
 
   @moduledoc false
 
@@ -68,7 +69,7 @@ defmodule Flagsmith.Engine do
         %Identity{} = identity,
         override_traits \\ []
       ) do
-    %{"flags" => flags} = evaluate_identity(env, identity, override_traits)
+    %{"flags" => flags} = evaluate_identity(env, identity, override_traits, flags: true)
 
     Enum.map(fs, fn %{feature: %{name: name}} ->
       %{"enabled" => enabled, "value" => value, "metadata" => %{feature_state: feature_state}} =
@@ -88,16 +89,32 @@ defmodule Flagsmith.Engine do
           override_traits :: list(Traits.Trait.t())
         ) :: list(Segments.IdentitySegment.t())
   def get_identity_segments(%Environment{} = env, identity, override_traits \\ []) do
-    %{"segments" => segments} = evaluate_identity(env, identity, override_traits)
+    %{"segments" => segments} = evaluate_identity(env, identity, override_traits, flags: false)
 
     for %{"metadata" => %{segment: segment}} <- segments,
         do: Segments.IdentitySegment.from_segment(segment)
   end
 
-  defp evaluate_identity(env, identity, override_traits) do
+  defp evaluate_identity(env, identity, override_traits, opts) do
     env
-    |> Mappers.map_environment_identity_to_context(identity, override_traits)
-    |> Evaluator.get_evaluation_result()
+    |> prepare_environment()
+    |> Evaluator.evaluate(
+      Mappers.map_identity_to_context(env, identity, override_traits),
+      [{:segments, Mappers.map_identity_overrides_to_segments(identity)} | opts]
+    )
+  end
+
+  # kept per process for the environment last evaluated, an unchanged one being the same term
+  defp prepare_environment(env) do
+    case Process.get(@prepared_environment_key) do
+      {^env, prepared} ->
+        prepared
+
+      _ ->
+        prepared = env |> Mappers.map_environment_to_context() |> Evaluator.prepare()
+        Process.put(@prepared_environment_key, {env, prepared})
+        prepared
+    end
   end
 
   @doc """

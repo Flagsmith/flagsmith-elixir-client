@@ -4,10 +4,21 @@ defmodule Flagsmith.Engine.Evaluator do
   alias Flagsmith.Engine.JSONPath
 
   @type context :: map()
+  @type prepared :: map()
   @type flag_result :: %{String.t() => term()}
   @type result :: %{String.t() => term()}
 
   @circular_dependency_reason "ERROR; code=CIRCULAR_DEPENDENCY"
+
+  @comparison_operators [
+    "EQUAL",
+    "NOT_EQUAL",
+    "GREATER_THAN",
+    "GREATER_THAN_INCLUSIVE",
+    "LESS_THAN",
+    "LESS_THAN_INCLUSIVE",
+    "CONTAINS"
+  ]
 
   @doc """
   Get the flags and matching segments for an evaluation context, as specified by
@@ -23,18 +34,57 @@ defmodule Flagsmith.Engine.Evaluator do
   """
   @spec get_evaluation_result(context()) :: result()
   def get_evaluation_result(context) do
-    context = enrich_context(context)
-    features = entries(context["features"])
-    segments = entries(context["segments"])
+    context
+    |> prepare()
+    |> evaluate(Map.get(context, "identity"))
+  end
 
-    evaluation = %{
+  @doc """
+  Prepare everything but the identity of a context for evaluation, so that the
+  work it takes is shared by every identity evaluated with `evaluate/3`.
+  """
+  @spec prepare(context()) :: prepared()
+  def prepare(context) do
+    features = entries(Map.get(context, "features"))
+    segments = Enum.map(entries(Map.get(context, "segments")), &prepare_segment/1)
+
+    %{
       context:
-        Map.merge(context, %{"features" => Map.new(features), "segments" => Map.new(segments)}),
-      features: Map.new(features),
-      segments: Map.new(segments),
-      identity_key: get_in(context, ["identity", "key"]),
+        context
+        |> Map.delete("identity")
+        |> Map.merge(%{
+          "features" => Map.new(features),
+          "segments" => Map.new(segments, fn {key, segment} -> {key, segment.context} end)
+        }),
+      environment_key: get_in(context, ["environment", "key"]),
+      features: features,
+      features_by_key: Map.new(features),
+      segments: segments,
+      segments_by_key: Map.new(segments),
       segment_keys_by_feature_name: segment_keys_by_feature_name(segments)
     }
+  end
+
+  @doc """
+  Evaluate a prepared context for an identity, or none.
+
+  Options:
+
+    * `:segments` - segments to evaluate after those of the prepared context,
+      as `{key, segment}` tuples
+    * `:flags` - whether to evaluate flags, or only segments. Defaults to `true`
+  """
+  @spec evaluate(prepared(), map() | nil, keyword()) :: result()
+  def evaluate(prepared, identity, opts \\ []) do
+    evaluation = add_segments(prepared, Keyword.get(opts, :segments, []))
+    identity = enrich_identity(identity, prepared.environment_key)
+
+    evaluation =
+      Map.merge(evaluation, %{
+        context: put_identity(evaluation.context, identity),
+        identity_key: identity && Map.get(identity, "key"),
+        traits: (identity && Map.get(identity, "traits")) || %{}
+      })
 
     state = %{
       resolved: %{},
@@ -46,62 +96,177 @@ defmodule Flagsmith.Engine.Evaluator do
       segment_matches: %{}
     }
 
-    {segment_results, segment_overrides, state} = evaluate_segments(evaluation, segments, state)
-    flags = evaluate_features(evaluation, features, segment_overrides)
+    {segment_results, segment_overrides, state} = evaluate_segments(evaluation, state)
 
     flags =
-      case state.used do
-        false ->
-          flags
-
-        true ->
-          # flags resolved for conditions are cycle-guarded, so take precedence
-          state.cyclic
-          |> Enum.reduce(Map.merge(flags, state.resolved), fn feature_name, flags ->
-            case flags do
-              %{^feature_name => flag} ->
-                Map.put(flags, feature_name, %{flag | "reason" => @circular_dependency_reason})
-
-              _ ->
-                flags
-            end
-          end)
+      case Keyword.get(opts, :flags, true) do
+        true -> evaluate_features(evaluation, segment_overrides, state)
+        false -> %{}
       end
 
     %{"flags" => flags, "segments" => segment_results}
   end
 
-  defp enrich_context(%{"identity" => %{"identifier" => identifier} = identity} = context) do
-    case identity["key"] do
-      key when key in [nil, ""] ->
-        put_in(context, ["identity", "key"], "#{context["environment"]["key"]}_#{identifier}")
-
-      _ ->
-        context
-    end
-  end
-
-  defp enrich_context(context), do: context
-
   defp entries(nil), do: []
   defp entries(map) when is_map(map), do: Enum.to_list(map)
   defp entries(list) when is_list(list), do: list
 
+  defp add_segments(evaluation, []), do: evaluation
+
+  defp add_segments(evaluation, segments) do
+    segments = Enum.map(segments, &prepare_segment/1)
+
+    keys_by_feature_name =
+      Map.merge(
+        evaluation.segment_keys_by_feature_name,
+        segment_keys_by_feature_name(segments),
+        fn _name, keys, added_keys -> keys ++ added_keys end
+      )
+
+    %{
+      evaluation
+      | context:
+          Map.update!(evaluation.context, "segments", fn context_segments ->
+            Enum.reduce(segments, context_segments, fn {key, segment}, context_segments ->
+              Map.put(context_segments, key, segment.context)
+            end)
+          end),
+        segments: evaluation.segments ++ segments,
+        segments_by_key: Map.merge(evaluation.segments_by_key, Map.new(segments)),
+        segment_keys_by_feature_name: keys_by_feature_name
+    }
+  end
+
+  defp enrich_identity(%{"identifier" => identifier} = identity, environment_key) do
+    case Map.get(identity, "key") do
+      key when key in [nil, ""] -> Map.put(identity, "key", "#{environment_key}_#{identifier}")
+      _ -> identity
+    end
+  end
+
+  defp enrich_identity(identity, _environment_key), do: identity
+
+  defp put_identity(context, nil), do: context
+  defp put_identity(context, identity), do: Map.put(context, "identity", identity)
+
   defp segment_keys_by_feature_name(segments) do
     segments
     |> Enum.flat_map(fn {segment_key, segment} ->
-      Enum.map(overrides(segment), &{&1["name"], segment_key})
+      Enum.map(segment.overrides, &{&1.name, segment_key})
     end)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
-  defp overrides(segment), do: segment["overrides"] || []
+  defp prepare_segment({key, segment}) do
+    segment_key = Map.get(segment, "key")
 
-  defp evaluate_segments(evaluation, segments, state) do
+    rules =
+      case Map.get(segment, "rules") do
+        [_ | _] = rules -> Enum.map(rules, &prepare_rule(&1, segment_key))
+        _ -> nil
+      end
+
+    overrides =
+      for override <- Map.get(segment, "overrides") || [] do
+        %{name: Map.get(override, "name"), priority: priority(override), feature: override}
+      end
+
+    {key,
+     %{
+       context: segment,
+       name: Map.get(segment, "name"),
+       rules: rules,
+       overrides: overrides,
+       result: segment_result(segment)
+     }}
+  end
+
+  defp prepare_rule(rule, segment_key) do
+    conditions =
+      case Map.get(rule, "conditions") do
+        [_ | _] = conditions -> Enum.map(conditions, &prepare_condition(&1, segment_key))
+        _ -> []
+      end
+
+    rules =
+      case Map.get(rule, "rules") do
+        [_ | _] = rules -> Enum.map(rules, &prepare_rule(&1, segment_key))
+        _ -> []
+      end
+
+    case Map.get(rule, "type") do
+      type when type in ["ALL", "ANY", "NONE"] -> {type, conditions, rules}
+      _ -> :invalid
+    end
+  end
+
+  defp prepare_condition(condition, segment_key) do
+    operator = Map.get(condition, "operator")
+    property = Map.get(condition, "property")
+
+    property =
+      case operator == "PERCENTAGE_SPLIT" and property in [nil, ""] do
+        # legacy segments split on the identity key
+        true -> :identity_key
+        false -> prepare_property(property || "")
+      end
+
+    {operator, property, prepare_value(operator, Map.get(condition, "value"), segment_key)}
+  end
+
+  defp prepare_property("$." <> _ = property) do
+    case JSONPath.compile(property) do
+      {:ok, segments} -> {:path, property, segments}
+      :error -> {:trait, property}
+    end
+  end
+
+  defp prepare_property(property), do: {:trait, property}
+
+  defp prepare_value("IN", value, _segment_key), do: in_values(value)
+
+  defp prepare_value("PERCENTAGE_SPLIT", value, segment_key),
+    do: {parse_float(value), to_str(segment_key)}
+
+  defp prepare_value("NOT_CONTAINS", value, _segment_key), do: to_str(value)
+
+  defp prepare_value("REGEX", value, _segment_key) do
+    case :re.compile(to_str(value), [:unicode, :ucp]) do
+      {:ok, regex} -> {:ok, regex}
+      {:error, _} -> :error
+    end
+  end
+
+  defp prepare_value("MODULO", value, _segment_key) when is_binary(value) do
+    with [divisor, remainder] <- String.split(value, "|"),
+         {:ok, divisor} when divisor != 0 <- parse_float(divisor),
+         {:ok, remainder} <- parse_float(remainder) do
+      {:ok, divisor, remainder}
+    else
+      _ -> :error
+    end
+  end
+
+  defp prepare_value("MODULO", _value, _segment_key), do: :error
+
+  defp prepare_value(operator, value, _segment_key) when operator in @comparison_operators do
+    version =
+      case semver?(value) do
+        true -> Version.parse(String.replace_suffix(value, ":semver", ""))
+        false -> nil
+      end
+
+    %{version: version, value: value, string: to_str(value)}
+  end
+
+  defp prepare_value(_operator, value, _segment_key), do: value
+
+  defp evaluate_segments(evaluation, state) do
     {results, overrides, state, _cycle_hits} =
-      Enum.reduce(segments, {[], %{}, state, state.cycle_hits}, fn {_key, segment},
-                                                                   {results, overrides, state,
-                                                                    cycle_hits} ->
+      Enum.reduce(evaluation.segments, {[], %{}, state, state.cycle_hits}, fn {_key, segment},
+                                                                              {results, overrides,
+                                                                               state,
+                                                                               cycle_hits} ->
         {matches, state} = context_in_segment?(evaluation, state, segment)
 
         cond do
@@ -114,16 +279,14 @@ defmodule Flagsmith.Engine.Evaluator do
 
           true ->
             overrides =
-              Enum.reduce(overrides(segment), overrides, fn override, overrides ->
-                name = override["name"]
-
-                case wins_over?(override, overrides[name]) do
-                  true -> Map.put(overrides, name, {override, segment["name"]})
+              Enum.reduce(segment.overrides, overrides, fn %{name: name} = override, overrides ->
+                case wins_over?(override, overrides) do
+                  true -> Map.put(overrides, name, {override, segment.name})
                   false -> overrides
                 end
               end)
 
-            {[segment_result(segment) | results], overrides, state, cycle_hits}
+            {[segment.result | results], overrides, state, cycle_hits}
         end
       end)
 
@@ -131,35 +294,59 @@ defmodule Flagsmith.Engine.Evaluator do
   end
 
   defp segment_result(%{"name" => name} = segment) do
-    case segment["metadata"] do
+    case Map.get(segment, "metadata") do
       metadata when metadata in [nil, %{}] -> %{"name" => name}
       metadata -> %{"name" => name, "metadata" => metadata}
     end
   end
 
   # lower priority wins, the first seen wins a tie
-  defp wins_over?(_candidate, nil), do: true
-
-  defp wins_over?(candidate, {incumbent, _segment_name}),
-    do: priority(candidate) < priority(incumbent)
+  defp wins_over?(%{name: name, priority: priority}, overrides) do
+    case overrides do
+      %{^name => {incumbent, _segment_name}} -> priority < incumbent.priority
+      _ -> true
+    end
+  end
 
   defp priority(%{"priority" => :negative_infinity}), do: {0, 0}
   defp priority(%{"priority" => priority}) when is_number(priority), do: {1, priority}
   defp priority(_), do: {2, 0}
 
-  defp evaluate_features(evaluation, features, segment_overrides) do
-    Map.new(features, fn {_key, %{"name" => name} = feature} ->
-      flag =
-        case segment_overrides do
-          %{^name => {override, segment_name}} ->
-            flag_result(evaluation, override, "TARGETING_MATCH; segment=#{segment_name}")
+  defp evaluate_features(evaluation, segment_overrides, state) do
+    flags =
+      Map.new(evaluation.features, fn {_key, %{"name" => name} = feature} ->
+        flag =
+          case segment_overrides do
+            %{^name => {override, segment_name}} ->
+              flag_result(
+                evaluation,
+                override.feature,
+                "TARGETING_MATCH; segment=#{segment_name}"
+              )
 
-          _ ->
-            flag_result(evaluation, feature, fallback_reason(evaluation, name))
-        end
+            _ ->
+              flag_result(evaluation, feature, fallback_reason(evaluation, name))
+          end
 
-      {name, flag}
-    end)
+        {name, flag}
+      end)
+
+    case state.used do
+      false ->
+        flags
+
+      true ->
+        # flags resolved for conditions are cycle-guarded, so take precedence
+        Enum.reduce(state.cyclic, Map.merge(flags, state.resolved), fn feature_name, flags ->
+          case flags do
+            %{^feature_name => flag} ->
+              Map.put(flags, feature_name, %{flag | "reason" => @circular_dependency_reason})
+
+            _ ->
+              flags
+          end
+        end)
+    end
   end
 
   defp fallback_reason(%{segment_keys_by_feature_name: keys}, name)
@@ -170,46 +357,48 @@ defmodule Flagsmith.Engine.Evaluator do
 
   defp flag_result(evaluation, feature, reason) do
     {value, variant, reason} =
-      case {evaluation.identity_key, feature["variants"]} do
+      case {evaluation.identity_key, Map.get(feature, "variants")} do
         {key, [_ | _] = variants} when not is_nil(key) ->
           select_variant(feature, key, variants, reason)
 
         _ ->
-          {feature["value"], nil, reason}
+          {Map.get(feature, "value"), nil, reason}
       end
 
     result = %{
-      "enabled" => feature["enabled"],
-      "name" => feature["name"],
+      "enabled" => Map.get(feature, "enabled"),
+      "name" => Map.get(feature, "name"),
       "reason" => reason,
       "value" => value,
       "variant" => variant
     }
 
-    case feature["metadata"] do
+    case Map.get(feature, "metadata") do
       metadata when metadata in [nil, %{}] -> result
       metadata -> Map.put(result, "metadata", metadata)
     end
   end
 
   defp select_variant(feature, identity_key, variants, reason) do
-    percentage = Flagsmith.Engine.percentage_from_ids([to_str(feature["key"]), identity_key])
+    percentage =
+      Flagsmith.Engine.percentage_from_ids([to_str(Map.get(feature, "key")), identity_key])
 
     variants
-    |> Enum.sort_by(& &1["priority"])
+    |> Enum.sort_by(&Map.get(&1, "priority"))
     |> Enum.reduce_while(0, fn %{"weight" => weight} = variant, start ->
       limit = weight + start
 
       case start <= percentage and percentage < limit do
         true ->
-          {:halt, {variant["value"], variant["key"], "SPLIT; weight=#{to_str(weight)}"}}
+          {:halt,
+           {Map.get(variant, "value"), Map.get(variant, "key"), "SPLIT; weight=#{to_str(weight)}"}}
 
         false ->
           {:cont, limit}
       end
     end)
     |> case do
-      limit when is_number(limit) -> {feature["value"], "control", reason}
+      limit when is_number(limit) -> {Map.get(feature, "value"), "control", reason}
       selected -> selected
     end
   end
@@ -236,7 +425,7 @@ defmodule Flagsmith.Engine.Evaluator do
             cycle_hits: state.cycle_hits + 1
         }
 
-      not is_map_key(evaluation.features, feature_name) ->
+      not is_map_key(evaluation.features_by_key, feature_name) ->
         state
 
       true ->
@@ -254,12 +443,12 @@ defmodule Flagsmith.Engine.Evaluator do
             state
 
           override ->
-            {feature, segment_name} = override
+            {%{feature: feature}, segment_name} = override
             flag = flag_result(evaluation, feature, "TARGETING_MATCH; segment=#{segment_name}")
             put_in(state, [:resolved, feature_name], flag)
 
           true ->
-            feature = evaluation.features[feature_name]
+            feature = evaluation.features_by_key[feature_name]
             flag = flag_result(evaluation, feature, fallback_reason(evaluation, feature_name))
             put_in(state, [:resolved, feature_name], flag)
         end
@@ -275,15 +464,14 @@ defmodule Flagsmith.Engine.Evaluator do
           {override, state}
 
         {true, state} ->
-          segment = evaluation.segments[segment_key]
+          segment = evaluation.segments_by_key[segment_key]
 
           override =
-            segment
-            |> overrides()
-            |> Enum.filter(&(&1["name"] == feature_name))
+            segment.overrides
+            |> Enum.filter(&(&1.name == feature_name))
             |> Enum.reduce(override, fn candidate, override ->
-              case wins_over?(candidate, override) do
-                true -> {candidate, segment["name"]}
+              case override == nil or candidate.priority < elem(override, 0).priority do
+                true -> {candidate, segment.name}
                 false -> override
               end
             end)
@@ -300,7 +488,7 @@ defmodule Flagsmith.Engine.Evaluator do
 
       _ ->
         cycle_hits = state.cycle_hits
-        segment = evaluation.segments[segment_key]
+        segment = evaluation.segments_by_key[segment_key]
         {matches, state} = context_in_segment?(evaluation, state, segment)
 
         case state.cycle_hits != cycle_hits do
@@ -311,87 +499,54 @@ defmodule Flagsmith.Engine.Evaluator do
     end
   end
 
-  defp context_in_segment?(evaluation, state, %{"rules" => [_ | _] = rules} = segment) do
-    all(rules, state, &rule_matches?(evaluation, &2, &1, segment["key"]))
+  defp context_in_segment?(_evaluation, state, %{rules: nil}), do: {false, state}
+
+  defp context_in_segment?(evaluation, state, %{rules: rules}),
+    do: all(rules, state, &rule_matches?(evaluation, &2, &1))
+
+  defp rule_matches?(_evaluation, state, :invalid), do: {false, state}
+
+  defp rule_matches?(evaluation, state, {type, conditions, rules}) do
+    {matches_conditions, state} =
+      matching(type, conditions, state, &condition_matches?(evaluation, &2, &1))
+
+    {matches_rules, state} = matching(type, rules, state, &rule_matches?(evaluation, &2, &1))
+    {matches_conditions and matches_rules, state}
   end
 
-  defp context_in_segment?(_evaluation, state, _segment), do: {false, state}
+  defp matching(_type, [], state, _fun), do: {true, state}
+  defp matching("ALL", items, state, fun), do: all(items, state, fun)
+  defp matching("ANY", items, state, fun), do: any(items, state, fun)
 
-  defp rule_matches?(evaluation, state, rule, segment_key) do
-    case matching_function(rule["type"]) do
-      nil ->
-        {false, state}
-
-      matching_function ->
-        {matches_conditions, state} =
-          case rule["conditions"] do
-            [_ | _] = conditions ->
-              matching_function.(
-                conditions,
-                state,
-                &condition_matches?(evaluation, &2, &1, segment_key)
-              )
-
-            _ ->
-              {true, state}
-          end
-
-        {matches_rules, state} =
-          case rule["rules"] do
-            [_ | _] = rules ->
-              matching_function.(rules, state, &rule_matches?(evaluation, &2, &1, segment_key))
-
-            _ ->
-              {true, state}
-          end
-
-        {matches_conditions and matches_rules, state}
-    end
-  end
-
-  defp matching_function("ALL"), do: &all/3
-  defp matching_function("ANY"), do: &any/3
-  defp matching_function("NONE"), do: &none/3
-  defp matching_function(_), do: nil
-
-  defp all(items, state, fun) do
-    Enum.reduce_while(items, {true, state}, fn item, {_, state} ->
-      case fun.(item, state) do
-        {true, state} -> {:cont, {true, state}}
-        {false, state} -> {:halt, {false, state}}
-      end
-    end)
-  end
-
-  defp any(items, state, fun) do
-    Enum.reduce_while(items, {false, state}, fn item, {_, state} ->
-      case fun.(item, state) do
-        {true, state} -> {:halt, {true, state}}
-        {false, state} -> {:cont, {false, state}}
-      end
-    end)
-  end
-
-  defp none(items, state, fun) do
+  defp matching("NONE", items, state, fun) do
     {matches, state} = any(items, state, fun)
     {not matches, state}
   end
 
-  defp condition_matches?(evaluation, state, condition, segment_key) do
-    property = condition["property"]
-    operator = condition["operator"]
+  defp all([], state, _fun), do: {true, state}
 
-    {context_value, state} =
-      case operator == "PERCENTAGE_SPLIT" and property in [nil, ""] do
-        # legacy segments split on the identity key
-        true -> {evaluation.identity_key, state}
-        false -> get_context_value(evaluation, state, property || "")
-      end
-
-    {matches_condition?(operator, condition["value"], context_value, segment_key), state}
+  defp all([item | items], state, fun) do
+    case fun.(item, state) do
+      {true, state} -> all(items, state, fun)
+      {false, _state} = result -> result
+    end
   end
 
-  defp matches_condition?("IN", segment_value, context_value, _segment_key) do
+  defp any([], state, _fun), do: {false, state}
+
+  defp any([item | items], state, fun) do
+    case fun.(item, state) do
+      {true, _state} = result -> result
+      {false, state} -> any(items, state, fun)
+    end
+  end
+
+  defp condition_matches?(evaluation, state, {operator, property, value}) do
+    {context_value, state} = get_context_value(evaluation, state, property)
+    {matches_condition?(operator, value, context_value), state}
+  end
+
+  defp matches_condition?("IN", values, context_value) do
     # Guard against comparing boolean values to numeric strings.
     context_value =
       case is_integer(context_value) do
@@ -399,83 +554,49 @@ defmodule Flagsmith.Engine.Evaluator do
         false -> context_value
       end
 
-    is_binary(context_value) and MapSet.member?(in_values(segment_value), context_value)
+    is_binary(context_value) and MapSet.member?(values, context_value)
   end
 
-  defp matches_condition?("PERCENTAGE_SPLIT", _segment_value, nil, _segment_key), do: false
+  defp matches_condition?("PERCENTAGE_SPLIT", _value, nil), do: false
 
-  defp matches_condition?("PERCENTAGE_SPLIT", segment_value, context_value, segment_key) do
-    case parse_float(segment_value) do
-      {:ok, float} ->
-        Flagsmith.Engine.percentage_from_ids([to_str(segment_key), to_str(context_value)]) <=
-          float
+  defp matches_condition?("PERCENTAGE_SPLIT", {{:ok, float}, segment_key}, context_value),
+    do: Flagsmith.Engine.percentage_from_ids([segment_key, to_str(context_value)]) <= float
 
-      :error ->
-        false
-    end
-  end
+  defp matches_condition?("PERCENTAGE_SPLIT", _value, _context_value), do: false
+  defp matches_condition?("IS_NOT_SET", _value, context_value), do: is_nil(context_value)
+  defp matches_condition?("IS_SET", _value, context_value), do: not is_nil(context_value)
+  defp matches_condition?(_operator, _value, nil), do: false
 
-  defp matches_condition?("IS_NOT_SET", _segment_value, context_value, _segment_key),
-    do: is_nil(context_value)
+  defp matches_condition?("NOT_CONTAINS", value, context_value),
+    do: is_binary(context_value) and not String.contains?(context_value, value)
 
-  defp matches_condition?("IS_SET", _segment_value, context_value, _segment_key),
-    do: not is_nil(context_value)
+  defp matches_condition?("REGEX", {:ok, regex}, context_value),
+    do: :re.run(to_str(context_value), regex, [:anchored, capture: :none]) == :match
 
-  defp matches_condition?(_operator, _segment_value, nil, _segment_key), do: false
+  defp matches_condition?("MODULO", {:ok, divisor, remainder}, context_value)
+       when is_number(context_value),
+       do: modulo(context_value, divisor) == remainder
 
-  defp matches_condition?("NOT_CONTAINS", segment_value, context_value, _segment_key),
-    do: is_binary(context_value) and not String.contains?(context_value, to_str(segment_value))
-
-  defp matches_condition?("REGEX", segment_value, context_value, _segment_key) do
-    case :re.compile(to_str(segment_value), [:unicode, :ucp]) do
-      {:ok, regex} ->
-        :re.run(to_str(context_value), regex, [:anchored, capture: :none]) == :match
-
-      {:error, _} ->
-        false
-    end
-  end
-
-  defp matches_condition?("MODULO", segment_value, context_value, _segment_key)
-       when is_number(context_value) and is_binary(segment_value) do
-    with [divisor, remainder] <- String.split(segment_value, "|"),
-         {:ok, divisor} when divisor != 0 <- parse_float(divisor),
-         {:ok, remainder} <- parse_float(remainder) do
-      modulo(context_value, divisor) == remainder
-    else
-      _ -> false
-    end
-  end
-
-  defp matches_condition?(operator, segment_value, context_value, _segment_key)
-       when operator in [
-              "EQUAL",
-              "NOT_EQUAL",
-              "GREATER_THAN",
-              "GREATER_THAN_INCLUSIVE",
-              "LESS_THAN",
-              "LESS_THAN_INCLUSIVE",
-              "CONTAINS"
-            ] do
-    case is_binary(context_value) and semver?(segment_value) do
+  defp matches_condition?(operator, %{version: version} = value, context_value)
+       when operator in @comparison_operators do
+    case is_binary(context_value) and version != nil do
       true ->
         with {:ok, context_version} <- Version.parse(context_value),
-             {:ok, segment_version} <-
-               Version.parse(String.replace_suffix(segment_value, ":semver", "")) do
+             {:ok, segment_version} <- version do
           compare_versions(operator, Version.compare(context_version, segment_version))
         else
           _ -> false
         end
 
       false ->
-        case cast_to_type_of(context_value, segment_value) do
+        case cast_to_type_of(context_value, value) do
           {:ok, match_value} -> compare(operator, context_value, match_value)
           :error -> false
         end
     end
   end
 
-  defp matches_condition?(_operator, _segment_value, _context_value, _segment_key), do: false
+  defp matches_condition?(_operator, _value, _context_value), do: false
 
   defp compare_versions("EQUAL", order), do: order == :eq
   defp compare_versions("NOT_EQUAL", order), do: order != :eq
@@ -503,16 +624,16 @@ defmodule Flagsmith.Engine.Evaluator do
 
   defp compare(_, _, _), do: false
 
-  defp cast_to_type_of(context_value, segment_value) when is_boolean(context_value),
-    do: {:ok, segment_value not in ["False", "false"]}
+  defp cast_to_type_of(context_value, value) when is_boolean(context_value),
+    do: {:ok, value.value not in ["False", "false"]}
 
-  defp cast_to_type_of(context_value, segment_value) when is_integer(context_value),
-    do: parse_integer(segment_value)
+  defp cast_to_type_of(context_value, value) when is_integer(context_value),
+    do: parse_integer(value.value)
 
-  defp cast_to_type_of(context_value, segment_value) when is_float(context_value),
-    do: parse_float(segment_value)
+  defp cast_to_type_of(context_value, value) when is_float(context_value),
+    do: parse_float(value.value)
 
-  defp cast_to_type_of(_context_value, segment_value), do: {:ok, to_str(segment_value)}
+  defp cast_to_type_of(_context_value, value), do: {:ok, value.string}
 
   defp semver?(value), do: is_binary(value) and String.ends_with?(value, ":semver")
 
@@ -538,23 +659,25 @@ defmodule Flagsmith.Engine.Evaluator do
     end
   end
 
-  defp get_context_value(evaluation, state, "$." <> _ = property) do
-    with nil <- trait_value(evaluation, property),
-         {:ok, segments} <- JSONPath.compile(property) do
-      {value, state} = query(evaluation, state, segments)
-      {to_context_value(value), state}
-    else
-      :error -> {nil, state}
-      value -> {to_context_value(value), state}
+  defp get_context_value(evaluation, state, :identity_key), do: {evaluation.identity_key, state}
+
+  defp get_context_value(evaluation, state, {:trait, property}),
+    do: {to_context_value(trait_value(evaluation, property)), state}
+
+  defp get_context_value(evaluation, state, {:path, property, segments}) do
+    case trait_value(evaluation, property) do
+      nil ->
+        {value, state} = query(evaluation, state, segments)
+        {to_context_value(value), state}
+
+      value ->
+        {to_context_value(value), state}
     end
   end
 
-  defp get_context_value(evaluation, state, property),
-    do: {to_context_value(trait_value(evaluation, property)), state}
-
-  defp trait_value(%{context: context}, trait_key) do
-    case context do
-      %{"identity" => %{"traits" => %{^trait_key => value}}} -> value
+  defp trait_value(%{traits: traits}, trait_key) do
+    case traits do
+      %{^trait_key => value} -> value
       _ -> nil
     end
   end
@@ -579,25 +702,35 @@ defmodule Flagsmith.Engine.Evaluator do
     end
   end
 
-  @doc """
-  Coerce a value to a context value: a string, number, boolean or nil.
-  Number-like strings are coerced to numbers.
-  """
-  @spec to_context_value(term()) :: String.t() | number() | boolean() | nil
-  def to_context_value(value) when is_binary(value) do
-    cond do
-      Regex.match?(~r/^-?[0-9]+$/, value) -> String.to_integer(value)
-      Regex.match?(~r/^-?[0-9]+\.[0-9]+$/, value) -> String.to_float(value)
-      true -> value
+  # number-like strings are coerced to numbers
+  defp to_context_value(value) when is_binary(value) do
+    case number_kind(value) do
+      :integer -> String.to_integer(value)
+      :float -> String.to_float(value)
+      nil -> value
     end
   end
 
-  def to_context_value(value) when is_number(value) or is_boolean(value) or is_nil(value),
+  defp to_context_value(value) when is_number(value) or is_boolean(value) or is_nil(value),
     do: value
 
-  def to_context_value(%Decimal{exp: 0} = value), do: Decimal.to_integer(value)
-  def to_context_value(%Decimal{} = value), do: Decimal.to_float(value)
-  def to_context_value(value), do: to_str(value)
+  defp to_context_value(%Decimal{exp: 0} = value), do: Decimal.to_integer(value)
+  defp to_context_value(%Decimal{} = value), do: Decimal.to_float(value)
+  defp to_context_value(value), do: to_str(value)
+
+  # as matching ~r/^-?[0-9]+(\.[0-9]+)?$/, without a trailing newline
+  defp number_kind("-" <> digits), do: number_kind(digits)
+  defp number_kind(<<c, _::binary>> = digits) when c in ?0..?9, do: integer_digits(digits)
+  defp number_kind(_), do: nil
+
+  defp integer_digits(<<c, rest::binary>>) when c in ?0..?9, do: integer_digits(rest)
+  defp integer_digits(""), do: :integer
+  defp integer_digits(<<?., c, rest::binary>>) when c in ?0..?9, do: fraction_digits(rest)
+  defp integer_digits(_), do: nil
+
+  defp fraction_digits(<<c, rest::binary>>) when c in ?0..?9, do: fraction_digits(rest)
+  defp fraction_digits(""), do: :float
+  defp fraction_digits(_), do: nil
 
   defp parse_integer(value) when is_binary(value) do
     case Integer.parse(String.trim(value)) do
