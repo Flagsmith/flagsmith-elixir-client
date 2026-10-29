@@ -1,7 +1,7 @@
 defmodule Flagsmith.Schemas.Flag do
   use TypedEctoSchema
 
-  alias Flagsmith.Schemas.{Environment, Features}
+  alias Flagsmith.Schemas.{Environment, Experiment, Features}
 
   @moduledoc """
   Ecto schema representing a Flagsmith Flag definition.
@@ -12,6 +12,8 @@ defmodule Flagsmith.Schemas.Flag do
     field(:enabled, :boolean)
     field(:feature_name, :string)
     field(:value, :string)
+    field(:variant, :string)
+    embeds_one(:experiment, Experiment)
   end
 
   @doc false
@@ -35,6 +37,8 @@ defmodule Flagsmith.Schemas.Flag do
   def from(%Features.FeatureState{
         enabled: enabled,
         feature_state_value: value,
+        variant: variant,
+        metadata: metadata,
         feature: %Features.Feature{
           name: name,
           id: id
@@ -44,7 +48,9 @@ defmodule Flagsmith.Schemas.Flag do
       enabled: enabled,
       feature_name: name,
       value: value,
-      feature_id: id
+      feature_id: id,
+      variant: variant,
+      experiment: metadata && metadata.experiment
     }
   end
 end
