@@ -31,13 +31,13 @@ defmodule Flagsmith.Supervisor do
 
   `{:ok, pid} = Flagsmith.Supervisor.start_link()`
 
-  This supervisor starts 3 additional processes, a local `Registry` and two dynamic
-  supervisors responsible for starting Pollers and Analytics processes (usually
+  This supervisor starts 4 additional processes, a local `Registry` and three dynamic
+  supervisors responsible for starting Pollers, Analytics and Events processes (usually
   a single one, but since they are isolated by sdk key used, if you use multiple
   sdks to access different environments in Flagsmith, in the same application you'll
-  end up with that same amount of processes, number of environments times 2).
-  The pollers and analytics are only started once there are interactions with either,
-  and they stay until application shutdown.
+  end up with that same amount of processes, number of environments times 3).
+  The pollers, analytics and events processes are only started once there are
+  interactions with them, and they stay until application shutdown.
   """
 
   def child_spec(_),
@@ -57,6 +57,7 @@ defmodule Flagsmith.Supervisor do
     children = [
       {Registry, [keys: :unique, name: Flagsmith.Registry]},
       Flagsmith.Client.Analytics.Processor.Supervisor,
+      Flagsmith.Client.Events.Processor.Supervisor,
       Flagsmith.Client.Poller.Supervisor
     ]
 

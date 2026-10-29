@@ -1,21 +1,35 @@
 defmodule Flagsmith.Client do
+  require Logger
+
   alias Flagsmith.Schemas
   alias Flagsmith.Configuration
+  alias Flagsmith.Client.Events
 
   @api_paths Flagsmith.Configuration.api_paths()
   @environment_header Flagsmith.Configuration.environment_header()
+  @flag_exposure_event Events.Processor.flag_exposure_event()
 
   @type tesla_header_list :: [{String.t(), String.t()}]
   @type config_or_env :: Configuration.t() | Keyword.t() | Schemas.Environment.t()
+  @type event_value :: String.t() | number() | boolean() | nil
+  @type event_opts :: [
+          identifier: String.t(),
+          value: event_value(),
+          traits: list(map() | Schemas.Traits.Trait.t()),
+          metadata: map()
+        ]
+
+  @doc false
+  @spec version() :: String.t()
+  def version do
+    # x-release-please-start-version
+    "2.3.1"
+    # x-release-please-end
+  end
 
   @doc false
   @spec user_agent() :: String.t()
-  def user_agent do
-    # x-release-please-start-version
-    version = "2.3.1"
-    # x-release-please-end
-    "flagsmith-elixir-sdk/#{version}"
-  end
+  def user_agent, do: "flagsmith-elixir-sdk/#{version()}"
 
   @doc """
   Create a `t:Flagsmith.Configuration.t/0` struct with the desired settings to use
@@ -204,6 +218,117 @@ defmodule Flagsmith.Client do
   end
 
   @doc """
+  Returns a `t:Flagsmith.Schemas.Flag.t/0` by name, evaluated for an identity as
+  `get_identity_flags/4` does, and records which variant of the feature the identity
+  was exposed to.
+
+  The exposure is sent as a `"$flag_exposure"` event, valued with the variant the
+  identity was served, only when the flag is enabled and the identity is enrolled in a
+  running experiment on the feature.
+
+  Requires `:enable_events` to be `true` and the `Flagsmith.Supervisor` to be running.
+  Returns what `get_flag/2` returns for the identity's flags, or an `:error` tuple if
+  unable to get them.
+  """
+  @spec get_experiment_flag(
+          Configuration.t() | Keyword.t(),
+          feature_name :: String.t(),
+          identifier :: String.t(),
+          list(map() | Schemas.Traits.Trait.t())
+        ) :: Schemas.Flag.t() | :not_found | term()
+  def get_experiment_flag(configuration_or_opts, feature_name, identifier, traits \\ [])
+
+  def get_experiment_flag(%Configuration{enable_events: false}, _, _, _),
+    do: {:error, :events_disabled}
+
+  def get_experiment_flag(%Configuration{} = config, feature_name, identifier, traits) do
+    with {:ok, flags} <- get_identity_flags(config, identifier, traits) do
+      flag = get_flag(flags, feature_name)
+
+      case exposure_skip_reason(flag) do
+        nil ->
+          track_exposure_event(config, feature_name,
+            identifier: identifier,
+            value: flag.variant,
+            traits: traits,
+            metadata: %{experiment_id: flag.experiment.id}
+          )
+
+        reason ->
+          Logger.debug("Not sending #{@flag_exposure_event}: #{reason}",
+            feature_name: feature_name
+          )
+      end
+
+      flag
+    end
+  end
+
+  def get_experiment_flag(opts, feature_name, identifier, traits) when is_list(opts),
+    do: get_experiment_flag(new(opts), feature_name, identifier, traits)
+
+  @doc """
+  Sends an event to Flagsmith, e.g. a conversion for experiments to measure.
+
+  Options:
+  - `:identifier` -> the identity the event happened to
+  - `:value` -> a string, number or boolean, sent as a string
+  - `:traits` -> the identity's traits, in the format `get_identity_flags/4` takes
+  - `:metadata` -> a map of additional data
+
+  Events are buffered and sent in batches, so this returns `:ok` without waiting for
+  the event to be sent. Requires `:enable_events` to be `true` and the
+  `Flagsmith.Supervisor` to be running. Event names starting with `$` are reserved
+  for Flagsmith's own events.
+  """
+  @spec track_event(Configuration.t() | Keyword.t(), event :: String.t(), event_opts()) ::
+          :ok | {:error, term()}
+  def track_event(configuration_or_opts, event, opts \\ [])
+
+  def track_event(%Configuration{enable_events: false}, _, _),
+    do: {:error, :events_disabled}
+
+  def track_event(%Configuration{}, "$" <> _ = event, _) when event != @flag_exposure_event,
+    do: {:error, {:reserved_event_name, event}}
+
+  def track_event(%Configuration{} = config, event, opts) when is_binary(event),
+    do: buffer_event(config, event, nil, opts)
+
+  def track_event(opts, event, event_opts) when is_list(opts),
+    do: track_event(new(opts), event, event_opts)
+
+  @doc """
+  Sends a `"$flag_exposure"` event to Flagsmith, recording that an identity was shown
+  a variant of a feature. `get_experiment_flag/4` sends these by itself.
+
+  Takes the same options as `track_event/3`, with `:value` being the variant, and
+  `:identifier` being required to reconcile the exposure with the identity's events.
+  Exposures equal in feature, identifier and value are sent once per flush interval.
+  """
+  @spec track_exposure_event(
+          Configuration.t() | Keyword.t(),
+          feature_name :: String.t(),
+          event_opts()
+        ) :: :ok | {:error, term()}
+  def track_exposure_event(configuration_or_opts, feature_name, opts \\ [])
+
+  def track_exposure_event(%Configuration{enable_events: false}, _, _),
+    do: {:error, :events_disabled}
+
+  def track_exposure_event(%Configuration{} = config, feature_name, opts) do
+    case Keyword.get(opts, :identifier) do
+      identifier when is_binary(identifier) and identifier != "" ->
+        buffer_event(config, @flag_exposure_event, feature_name, opts)
+
+      _ ->
+        {:error, :identifier_required}
+    end
+  end
+
+  def track_exposure_event(opts, feature_name, event_opts) when is_list(opts),
+    do: track_exposure_event(new(opts), feature_name, event_opts)
+
+  @doc """
   Return all flags from an environment as a list.
   If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
   `t:Flagsmith.Configuration.t/0` or list of options, then the flags are extracted
@@ -357,6 +482,24 @@ defmodule Flagsmith.Client do
       do: analytics_track(new(opts), tracking)
 
   @doc false
+  # Submits a batch of events to the Flagsmith events API.
+  @spec events_track(Configuration.t(), list(Events.Processor.event())) ::
+          {:ok, term()} | {:error, term()}
+  def events_track(%Configuration{events_api_url: events_api_url} = config, events) do
+    case Tesla.post(
+           http_client(%{config | api_url: events_api_url}),
+           @api_paths.events,
+           %{events: events}
+         ) do
+      {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
+        {:ok, body}
+
+      error_resp ->
+        return_error(error_resp)
+    end
+  end
+
+  @doc false
   # Given an `t:Flagsmith.Schemas.Environment.t/0` or a list composed of
   # `t:Flagsmith.Schemas.Environment.FeatureState.t/0` or
   # `t:Flagsmith.Schemas.Features.FeatureState.t/0` return a map composed of the
@@ -386,6 +529,45 @@ defmodule Flagsmith.Client do
 
     feature_flag
   end
+
+  defp exposure_skip_reason(%Schemas.Flag{enabled: false}), do: "feature is disabled"
+
+  defp exposure_skip_reason(%Schemas.Flag{experiment: %{in_experiment: true}, variant: nil}),
+    do: "flag has no variant"
+
+  defp exposure_skip_reason(%Schemas.Flag{experiment: %{in_experiment: true}}), do: nil
+
+  defp exposure_skip_reason(%Schemas.Flag{}), do: "identity is not in a running experiment"
+  defp exposure_skip_reason(_), do: "feature not found"
+
+  defp buffer_event(%Configuration{} = config, event, feature_name, opts) do
+    with {:ok, value} <- event_value(Keyword.get(opts, :value)) do
+      Events.Processor.track(
+        %{
+          event: event,
+          feature_name: feature_name,
+          identifier: Keyword.get(opts, :identifier),
+          value: value,
+          traits: event_traits(Keyword.get(opts, :traits)),
+          metadata: Map.put(Keyword.get(opts, :metadata) || %{}, :sdk_version, version()),
+          timestamp: System.os_time(:millisecond)
+        },
+        config
+      )
+    end
+  end
+
+  defp event_value(value) when is_nil(value) or is_binary(value), do: {:ok, value}
+  defp event_value(value) when is_number(value) or is_boolean(value), do: {:ok, to_string(value)}
+  defp event_value(value), do: {:error, {:invalid_value, value}}
+
+  defp event_traits([_ | _] = traits) do
+    traits
+    |> Schemas.Traits.Trait.from()
+    |> Map.new(fn %{trait_key: key, trait_value: value} -> {key, value} end)
+  end
+
+  defp event_traits(_), do: nil
 
   defp build_identity_params(identifier, [_ | _] = traits, transient) do
     %{
