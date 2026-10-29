@@ -9,13 +9,15 @@ defmodule Flagsmith.Configuration.Test do
   # If we used those from the configuration as we do in other tests, then
   # we wouldn't be asserting much
   @default_url "https://edge.api.flagsmith.com/api/v1/"
+  @default_events_url "https://events.api.flagsmith.com/"
   @environment_header "X-Environment-Key"
   @paths %{
     flags: "/flags/",
     identities: "/identities/",
     traits: "/traits/",
     analytics: "/analytics/flags/",
-    environment: "/environment-document/"
+    environment: "/environment-document/",
+    events: "/v1/events"
   }
 
   alias Flagsmith.Configuration
@@ -46,7 +48,10 @@ defmodule Flagsmith.Configuration.Test do
              enable_local_evaluation: false,
              environment_refresh_interval_milliseconds: 60_000,
              retries: 0,
-             enable_analytics: false
+             enable_analytics: false,
+             enable_events: false,
+             events_api_url: @default_events_url,
+             events_flush_interval_milliseconds: 10_000
            } = Configuration.build(environment_key: "A")
 
     assert is_nil(flag_handler)
@@ -54,6 +59,7 @@ defmodule Flagsmith.Configuration.Test do
 
   test "helper funs" do
     assert @default_url = Configuration.default_url()
+    assert @default_events_url = Configuration.default_events_url()
     assert @environment_header = Configuration.environment_header()
 
     assert @paths = Configuration.api_paths()
@@ -73,7 +79,10 @@ defmodule Flagsmith.Configuration.Test do
       enable_local_evaluation: true,
       environment_refresh_interval_milliseconds: 50_000,
       retries: 5,
-      enable_analytics: true
+      enable_analytics: true,
+      enable_events: true,
+      events_api_url: "https://events.example.com/",
+      events_flush_interval_milliseconds: 1_000
     )
 
     assert %Configuration{
@@ -85,7 +94,10 @@ defmodule Flagsmith.Configuration.Test do
              enable_local_evaluation: true,
              environment_refresh_interval_milliseconds: 50_000,
              retries: 5,
-             enable_analytics: true
+             enable_analytics: true,
+             enable_events: true,
+             events_api_url: "https://events.example.com/",
+             events_flush_interval_milliseconds: 1_000
            } = Configuration.build(environment_key: "B")
 
     assert is_function(default_handler, 1)
@@ -138,6 +150,20 @@ defmodule Flagsmith.Configuration.Test do
     assert_raise RuntimeError, ~r/^enable_analytics needs to be/, fn ->
       Configuration.build(environment_key: "A", enable_analytics: "false")
     end
+
+    assert_raise RuntimeError, ~r/^enable_events needs to be/, fn ->
+      Configuration.build(environment_key: "A", enable_events: "false")
+    end
+
+    assert_raise RuntimeError, ~r/^events_api_url needs to be/, fn ->
+      Configuration.build(environment_key: "A", events_api_url: 0)
+    end
+
+    Enum.each([0, "oi"], fn val ->
+      assert_raise RuntimeError, ~r/^events_flush_interval_milliseconds needs to be/, fn ->
+        Configuration.build(environment_key: "A", events_flush_interval_milliseconds: val)
+      end
+    end)
   end
 
   test "logs warning if unknown opt is passed" do

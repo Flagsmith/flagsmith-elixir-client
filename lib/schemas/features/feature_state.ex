@@ -18,8 +18,10 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
     field(:feature_state_value, Types.AnyOf, types: [:string, :integer, :float, :boolean])
     field(:id, :integer)
     field(:identity, :integer)
+    field(:variant, :string)
 
     embeds_one(:feature, Flagsmith.Schemas.Features.Feature)
+    embeds_one(:metadata, __MODULE__.Metadata)
   end
 
   @doc false
@@ -33,9 +35,11 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
       :feature_state_value,
       :feature_segment,
       :environment,
-      :enabled
+      :enabled,
+      :variant
     ])
     |> cast_embed(:feature, required: true)
+    |> cast_embed(:metadata)
   end
 
   @doc false

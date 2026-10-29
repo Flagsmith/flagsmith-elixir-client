@@ -2,6 +2,7 @@ defmodule Flagsmith.Configuration do
   require Logger
 
   @default_url "https://edge.api.flagsmith.com/api/v1/"
+  @default_events_url "https://events.api.flagsmith.com/"
   @environment_header "X-Environment-Key"
 
   @api_paths %{
@@ -9,7 +10,8 @@ defmodule Flagsmith.Configuration do
     identities: "/identities/",
     traits: "/traits/",
     analytics: "/analytics/flags/",
-    environment: "/environment-document/"
+    environment: "/environment-document/",
+    events: "/v1/events"
   }
 
   @min_refresh_interval if(Mix.env() == :test, do: 1, else: 60_000)
@@ -24,7 +26,10 @@ defmodule Flagsmith.Configuration do
     enable_local_evaluation: false,
     environment_refresh_interval_milliseconds: 60_000,
     retries: 0,
-    enable_analytics: false
+    enable_analytics: false,
+    enable_events: false,
+    events_api_url: @default_events_url,
+    events_flush_interval_milliseconds: 10_000
   ]
 
   @default_keys [
@@ -35,7 +40,10 @@ defmodule Flagsmith.Configuration do
     :enable_local_evaluation,
     :environment_refresh_interval_milliseconds,
     :retries,
-    :enable_analytics
+    :enable_analytics,
+    :enable_events,
+    :events_api_url,
+    :events_flush_interval_milliseconds
   ]
 
   @type t() :: %__MODULE__{
@@ -47,11 +55,17 @@ defmodule Flagsmith.Configuration do
           enable_local_evaluation: boolean(),
           environment_refresh_interval_milliseconds: non_neg_integer(),
           retries: non_neg_integer(),
-          enable_analytics: boolean()
+          enable_analytics: boolean(),
+          enable_events: boolean(),
+          events_api_url: String.t(),
+          events_flush_interval_milliseconds: pos_integer()
         }
 
   @doc false
   def default_url(), do: @default_url
+
+  @doc false
+  def default_events_url(), do: @default_events_url
 
   @doc false
   def environment_header(), do: @environment_header
@@ -144,6 +158,16 @@ defmodule Flagsmith.Configuration do
 
       :enable_analytics ->
         is_boolean(value) || {:error, "needs to be true or false"}
+
+      :enable_events ->
+        is_boolean(value) || {:error, "needs to be true or false"}
+
+      :events_api_url ->
+        is_binary(value) || {:error, "needs to be a String.t()"}
+
+      :events_flush_interval_milliseconds ->
+        (is_integer(value) and value > 0) ||
+          {:error, "needs to be an integer bigger than 0"}
     end
   end
 
