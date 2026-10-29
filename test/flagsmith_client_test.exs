@@ -1,7 +1,7 @@
 defmodule Flagsmith.Client.Test do
   use ExUnit.Case
 
-  import Mox, only: [verify_on_exit!: 1, expect: 3]
+  import Mox, only: [verify_on_exit!: 1, expect: 3, expect: 4]
   import Flagsmith.Test.Helpers, only: [assert_request: 2]
 
   alias Flagsmith.Engine.Test
@@ -505,6 +505,75 @@ defmodule Flagsmith.Client.Test do
       end)
 
       Flagsmith.Client.get_environment(config)
+    end
+  end
+
+  describe "paginated environment document" do
+    test "get_environment follows the next page links", %{config: config} do
+      first_page = Test.Generators.map_env()
+      [identity_override] = first_page["identity_overrides"]
+
+      override_page = fn identifier ->
+        %{"identity_overrides" => [Map.put(identity_override, "identifier", identifier)]}
+      end
+
+      next_link = fn page_id ->
+        [
+          {"link",
+           "</api/v1/environment-document/?page_id=#{URI.encode_www_form(page_id)}>; rel=\"next\""}
+        ]
+      end
+
+      expect(Tesla.Adapter.Mock, :call, 3, fn tesla_env, _options ->
+        case tesla_env.query do
+          [] ->
+            {:ok,
+             %Tesla.Env{
+               status: 200,
+               body: first_page,
+               headers: next_link.("identity_override:1:page-2")
+             }}
+
+          [page_id: "identity_override:1:page-2"] ->
+            {:ok,
+             %Tesla.Env{
+               status: 200,
+               body: override_page.("page-2-id"),
+               headers: next_link.("identity_override:1:page-3")
+             }}
+
+          [page_id: "identity_override:1:page-3"] ->
+            {:ok, %Tesla.Env{status: 200, body: override_page.("page-3-id")}}
+        end
+      end)
+
+      assert {:ok, %Schemas.Environment{} = env} = Flagsmith.Client.get_environment(config)
+
+      assert ["overridden-id", "page-2-id", "page-3-id"] =
+               Enum.map(env.identity_overrides, & &1.identifier)
+
+      assert length(env.feature_states) == length(first_page["feature_states"])
+    end
+
+    test "get_environment warns when fetching is slower than the refresh interval" do
+      config =
+        Flagsmith.Client.new(
+          environment_key: "client_test_key",
+          environment_refresh_interval_milliseconds: 1
+        )
+
+      expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+        Process.sleep(5)
+        {:ok, %Tesla.Env{status: 200, body: Test.Generators.map_env()}}
+      end)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, %Schemas.Environment{}} = Flagsmith.Client.get_environment(config)
+        end)
+
+      assert log =~ "Fetching the environment document took"
+      assert log =~ "longer than the environment refresh interval of 1ms"
     end
   end
 end

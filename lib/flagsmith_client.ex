@@ -1,4 +1,6 @@
 defmodule Flagsmith.Client do
+  require Logger
+
   alias Flagsmith.Schemas
   alias Flagsmith.Configuration
 
@@ -74,15 +76,62 @@ defmodule Flagsmith.Client do
 
   @doc false
   def get_environment_request(%Configuration{} = config) do
-    case Tesla.get(http_client(config), @api_paths.environment) do
-      {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        {:ok,
-         body
-         |> Schemas.Environment.from_response()
-         |> Schemas.Environment.add_client_config(config)}
+    started_at = System.monotonic_time(:millisecond)
+
+    with {:ok, body} <- get_environment_document(http_client(config)) do
+      warn_if_slower_than_refresh_interval(started_at, config)
+
+      {:ok,
+       body
+       |> Schemas.Environment.from_response()
+       |> Schemas.Environment.add_client_config(config)}
+    end
+  end
+
+  defp get_environment_document(client, query \\ [], document \\ nil) do
+    case Tesla.get(client, @api_paths.environment, query: query) do
+      {:ok, %{status: status, body: body} = response} when status >= 200 and status < 300 ->
+        document = append_identity_overrides(document, body)
+
+        case next_page_id(response) do
+          nil -> {:ok, document}
+          page_id -> get_environment_document(client, [page_id: page_id], document)
+        end
 
       error_resp ->
         return_error(error_resp)
+    end
+  end
+
+  defp append_identity_overrides(nil, page), do: page
+
+  defp append_identity_overrides(document, page) do
+    Map.put(
+      document,
+      "identity_overrides",
+      (document["identity_overrides"] || []) ++ (page["identity_overrides"] || [])
+    )
+  end
+
+  defp next_page_id(response) do
+    with link when is_binary(link) <- Tesla.get_header(response, "link"),
+         [_, next_url] <- Regex.run(~r/<([^>]+)>;\s*rel="next"/, link),
+         %URI{query: query} when is_binary(query) <- URI.parse(next_url) do
+      query |> URI.decode_query() |> Map.get("page_id")
+    else
+      _ -> nil
+    end
+  end
+
+  defp warn_if_slower_than_refresh_interval(started_at, %Configuration{
+         environment_refresh_interval_milliseconds: interval
+       }) do
+    elapsed = System.monotonic_time(:millisecond) - started_at
+
+    if elapsed > interval do
+      Logger.warning(
+        "Fetching the environment document took #{elapsed}ms, longer than the environment refresh interval of #{interval}ms; raise the refresh interval or reduce the environment size."
+      )
     end
   end
 
