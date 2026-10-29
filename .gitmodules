@@ -1,7 +1,7 @@
 [submodule "test/support/engine-test-data"]
 	path = test/support/engine-test-data
 	url = git@github.com:Flagsmith/engine-test-data.git
-	branch = v1.0.0
+	branch = v3.12.1
 [submodule "test/support/sdk-benchmarks"]
 	path = test/support/sdk-benchmarks
 	url = https://github.com/Flagsmith/sdk-benchmarks.git
