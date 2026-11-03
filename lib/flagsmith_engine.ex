@@ -510,7 +510,7 @@ defmodule Flagsmith.Engine do
         type: :string,
         value: t_value
       }) do
-    case Regex.compile(value) do
+    case Regex.compile(value, [:anchored]) do
       {:ok, regex} ->
         String.match?(t_value, regex)
 
