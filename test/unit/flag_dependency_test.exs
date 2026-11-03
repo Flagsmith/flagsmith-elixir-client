@@ -21,6 +21,12 @@ defmodule Flagsmith.Engine.FlagDependency.Test do
         "enabled" => false,
         "feature" => %{"id" => 2, "name" => "dependent", "type" => "STANDARD"},
         "feature_state_value" => "off"
+      },
+      %{
+        "django_id" => 4,
+        "enabled" => true,
+        "feature" => %{"id" => 3, "name" => "banner", "type" => "STANDARD"},
+        "feature_state_value" => "hello"
       }
     ],
     "identity_overrides" => [
@@ -63,6 +69,26 @@ defmodule Flagsmith.Engine.FlagDependency.Test do
               "feature_segment" => %{"priority" => 0}
             }
           ]
+        },
+        %{
+          "id" => 2,
+          "name" => "without_plan",
+          "rules" => [
+            %{
+              "type" => "ALL",
+              "rules" => [],
+              "conditions" => [%{"operator" => "IS_NOT_SET", "property_" => "plan"}]
+            }
+          ],
+          "feature_states" => [
+            %{
+              "django_id" => 5,
+              "enabled" => true,
+              "feature" => %{"id" => 3, "name" => "banner", "type" => "STANDARD"},
+              "feature_state_value" => "hello stranger",
+              "feature_segment" => %{"priority" => 1}
+            }
+          ]
         }
       ]
     }
@@ -88,7 +114,11 @@ defmodule Flagsmith.Engine.FlagDependency.Test do
 
     # Then
     assert %{enabled: true, feature_state_value: "on"} = dependent
-    assert [%Segments.IdentitySegment{id: 1, name: "prerequisite_enabled"}] = segments
+
+    assert [
+             %Segments.IdentitySegment{id: 1, name: "prerequisite_enabled"},
+             %Segments.IdentitySegment{id: 2, name: "without_plan"}
+           ] = segments
   end
 
   test "dependent flag keeps its default when its prerequisite is disabled", %{env: env} do
@@ -101,6 +131,77 @@ defmodule Flagsmith.Engine.FlagDependency.Test do
 
     # Then
     assert %{enabled: false, feature_state_value: "off"} = dependent
-    assert [] = segments
+    assert [%Segments.IdentitySegment{id: 2, name: "without_plan"}] = segments
   end
+
+  test "environment flags keep a dependent flag's default while its prerequisite is disabled", %{
+    env: env
+  } do
+    # Given / When
+    feature_states = Engine.get_environment_feature_states(env)
+
+    # Then
+    assert [
+             %{feature: %{name: "prerequisite"}, enabled: false},
+             %{feature: %{name: "dependent"}, enabled: false, feature_state_value: "off"},
+             %{feature: %{name: "banner"}}
+           ] = feature_states
+  end
+
+  test "environment flags follow a prerequisite enabled for the environment", %{env: env} do
+    # Given
+    env = enable_prerequisite(env)
+
+    # When
+    feature_states = Engine.get_environment_feature_states(env)
+
+    # Then
+    assert [
+             %{feature: %{name: "prerequisite"}, enabled: true},
+             %{feature: %{name: "dependent"}, enabled: true, feature_state_value: "on"},
+             %{feature: %{name: "banner"}}
+           ] = feature_states
+  end
+
+  test "environment flags ignore segments that need an identity", %{env: env} do
+    # Given / When
+    banner = Engine.get_environment_feature_state(env, "banner")
+
+    # Then
+    assert %{enabled: true, feature_state_value: "hello"} = banner
+  end
+
+  test "environment flags hidden when disabled include a flag its prerequisite enables", %{
+    env: env
+  } do
+    # Given
+    env = enable_prerequisite(env)
+    env = %{env | project: %{env.project | hide_disabled_flags: true}}
+
+    # When
+    feature_states = Engine.get_environment_feature_states(env)
+
+    # Then
+    assert [
+             %{feature: %{name: "prerequisite"}},
+             %{feature: %{name: "dependent"}, feature_state_value: "on"},
+             %{feature: %{name: "banner"}}
+           ] = feature_states
+  end
+
+  test "environment flags hidden when disabled leave out a flag its prerequisite disables", %{
+    env: env
+  } do
+    # Given
+    env = %{env | project: %{env.project | hide_disabled_flags: true}}
+
+    # When
+    feature_states = Engine.get_environment_feature_states(env)
+
+    # Then
+    assert [%{feature: %{name: "banner"}}] = feature_states
+  end
+
+  defp enable_prerequisite(%{feature_states: [prerequisite | feature_states]} = env),
+    do: %{env | feature_states: [%{prerequisite | enabled: true} | feature_states]}
 end

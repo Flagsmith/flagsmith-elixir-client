@@ -77,4 +77,21 @@ defmodule Flagsmith.Engine.PreparedEnvironment.Test do
     assert %{enabled: false, feature_state_value: "environment"} = changed
     assert unchanged == before
   end
+
+  test "environment flags of an environment changed after an evaluation are evaluated as changed",
+       %{env: env} do
+    # Given
+    %{feature_states: [feature_state]} = env
+    changed_env = %{env | feature_states: [%{feature_state | enabled: true}]}
+
+    # When
+    before = Engine.get_environment_feature_state(env, "feature")
+    changed = Engine.get_environment_feature_state(changed_env, "feature")
+    unchanged = Engine.get_environment_feature_state(env, "feature")
+
+    # Then
+    assert %{enabled: false} = before
+    assert %{enabled: true} = changed
+    assert unchanged == before
+  end
 end

@@ -9,6 +9,7 @@ defmodule Flagsmith.Engine.Evaluator do
   @type result :: %{String.t() => term()}
 
   @circular_dependency_reason "ERROR; code=CIRCULAR_DEPENDENCY"
+  @identity_overrides_segment_name "identity_overrides"
 
   @comparison_operators [
     "EQUAL",
@@ -45,15 +46,18 @@ defmodule Flagsmith.Engine.Evaluator do
   """
   @spec prepare(context()) :: prepared()
   def prepare(context) do
-    features = entries(Map.get(context, "features"))
+    context_features = entries(Map.get(context, "features"))
+    features = for {key, feature} <- context_features, do: {key, prepare_feature(feature)}
     segments = Enum.map(entries(Map.get(context, "segments")), &prepare_segment/1)
+    keys_by_feature_name = segment_keys_by_feature_name(segments)
+    without_identity = %{identity_key: nil, segment_keys_by_feature_name: keys_by_feature_name}
 
     %{
       context:
         context
         |> Map.delete("identity")
         |> Map.merge(%{
-          "features" => Map.new(features),
+          "features" => Map.new(context_features),
           "segments" => Map.new(segments, fn {key, segment} -> {key, segment.context} end)
         }),
       environment_key: get_in(context, ["environment", "key"]),
@@ -61,7 +65,13 @@ defmodule Flagsmith.Engine.Evaluator do
       features_by_key: Map.new(features),
       segments: segments,
       segments_by_key: Map.new(segments),
-      segment_keys_by_feature_name: segment_keys_by_feature_name(segments)
+      segment_keys_by_feature_name: keys_by_feature_name,
+      default_flags:
+        Enum.reduce(features, %{}, fn {_key, feature}, flags ->
+          put_flag(flags, feature, without_identity)
+        end),
+      # served by identity
+      variant_features: for({_key, %{splits: _} = feature} <- features, do: feature)
     }
   end
 
@@ -70,19 +80,28 @@ defmodule Flagsmith.Engine.Evaluator do
 
   Options:
 
-    * `:segments` - segments to evaluate after those of the prepared context,
-      as `{key, segment}` tuples
+    * `:identity_overrides` - feature contexts overriding any segment override,
+      as the overrides of a segment that the identity matches
     * `:flags` - whether to evaluate flags, or only segments. Defaults to `true`
   """
   @spec evaluate(prepared(), map() | nil, keyword()) :: result()
   def evaluate(prepared, identity, opts \\ []) do
-    evaluation = add_segments(prepared, Keyword.get(opts, :segments, []))
     identity = enrich_identity(identity, prepared.environment_key)
 
     evaluation =
-      Map.merge(evaluation, %{
-        context: put_identity(evaluation.context, identity),
+      Map.merge(prepared, %{
+        context: put_identity(prepared.context, identity),
         identity_key: identity && Map.get(identity, "key"),
+        identity_overrides:
+          Map.new(Keyword.get(opts, :identity_overrides, []), fn %{"name" => name} = feature ->
+            override = %{
+              name: name,
+              priority: priority(feature),
+              feature: prepare_feature(feature)
+            }
+
+            {name, {override, @identity_overrides_segment_name}}
+          end),
         traits: (identity && Map.get(identity, "traits")) || %{}
       })
 
@@ -110,32 +129,6 @@ defmodule Flagsmith.Engine.Evaluator do
   defp entries(nil), do: []
   defp entries(map) when is_map(map), do: Enum.to_list(map)
   defp entries(list) when is_list(list), do: list
-
-  defp add_segments(evaluation, []), do: evaluation
-
-  defp add_segments(evaluation, segments) do
-    segments = Enum.map(segments, &prepare_segment/1)
-
-    keys_by_feature_name =
-      Map.merge(
-        evaluation.segment_keys_by_feature_name,
-        segment_keys_by_feature_name(segments),
-        fn _name, keys, added_keys -> keys ++ added_keys end
-      )
-
-    %{
-      evaluation
-      | context:
-          Map.update!(evaluation.context, "segments", fn context_segments ->
-            Enum.reduce(segments, context_segments, fn {key, segment}, context_segments ->
-              Map.put(context_segments, key, segment.context)
-            end)
-          end),
-        segments: evaluation.segments ++ segments,
-        segments_by_key: Map.merge(evaluation.segments_by_key, Map.new(segments)),
-        segment_keys_by_feature_name: keys_by_feature_name
-    }
-  end
 
   defp enrich_identity(%{"identifier" => identifier} = identity, environment_key) do
     case Map.get(identity, "key") do
@@ -168,7 +161,11 @@ defmodule Flagsmith.Engine.Evaluator do
 
     overrides =
       for override <- Map.get(segment, "overrides") || [] do
-        %{name: Map.get(override, "name"), priority: priority(override), feature: override}
+        %{
+          name: Map.get(override, "name"),
+          priority: priority(override),
+          feature: prepare_feature(override)
+        }
       end
 
     {key,
@@ -290,7 +287,7 @@ defmodule Flagsmith.Engine.Evaluator do
         end
       end)
 
-    {Enum.reverse(results), overrides, state}
+    {Enum.reverse(results), Map.merge(overrides, evaluation.identity_overrides), state}
   end
 
   defp segment_result(%{"name" => name} = segment) do
@@ -314,21 +311,28 @@ defmodule Flagsmith.Engine.Evaluator do
 
   defp evaluate_features(evaluation, segment_overrides, state) do
     flags =
-      Map.new(evaluation.features, fn {_key, %{"name" => name} = feature} ->
-        flag =
-          case segment_overrides do
-            %{^name => {override, segment_name}} ->
-              flag_result(
-                evaluation,
-                override.feature,
-                "TARGETING_MATCH; segment=#{segment_name}"
-              )
+      case evaluation.identity_key do
+        nil ->
+          evaluation.default_flags
 
-            _ ->
-              flag_result(evaluation, feature, fallback_reason(evaluation, name))
-          end
+        _ ->
+          Enum.reduce(
+            evaluation.variant_features,
+            evaluation.default_flags,
+            &put_flag(&2, &1, evaluation)
+          )
+      end
 
-        {name, flag}
+    flags =
+      Enum.reduce(segment_overrides, flags, fn {name, {override, segment_name}}, flags ->
+        case flags do
+          %{^name => _} ->
+            reason = "TARGETING_MATCH; segment=#{segment_name}"
+            Map.put(flags, name, flag_result(evaluation, override.feature, reason))
+
+          _ ->
+            flags
+        end
       end)
 
     case state.used do
@@ -349,6 +353,9 @@ defmodule Flagsmith.Engine.Evaluator do
     end
   end
 
+  defp put_flag(flags, %{"name" => name} = feature, evaluation),
+    do: Map.put(flags, name, flag_result(evaluation, feature, fallback_reason(evaluation, name)))
+
   defp fallback_reason(%{segment_keys_by_feature_name: keys}, name)
        when is_map_key(keys, name),
        do: "DEFAULT"
@@ -357,9 +364,9 @@ defmodule Flagsmith.Engine.Evaluator do
 
   defp flag_result(evaluation, feature, reason) do
     {value, variant, reason} =
-      case {evaluation.identity_key, Map.get(feature, "variants")} do
-        {key, [_ | _] = variants} when not is_nil(key) ->
-          select_variant(feature, key, variants, reason)
+      case {evaluation.identity_key, feature} do
+        {key, %{splits: _}} when not is_nil(key) ->
+          select_variant(feature, key, reason)
 
         _ ->
           {Map.get(feature, "value"), nil, reason}
@@ -379,29 +386,34 @@ defmodule Flagsmith.Engine.Evaluator do
     end
   end
 
-  defp select_variant(feature, identity_key, variants, reason) do
+  defp select_variant(%{splits: splits} = feature, identity_key, reason) do
     percentage =
       Flagsmith.Engine.percentage_from_ids([to_str(Map.get(feature, "key")), identity_key])
 
-    variants
-    |> Enum.sort_by(&Map.get(&1, "priority"))
-    |> Enum.reduce_while(0, fn %{"weight" => weight} = variant, start ->
-      limit = weight + start
-
-      case start <= percentage and percentage < limit do
-        true ->
-          {:halt,
-           {Map.get(variant, "value"), Map.get(variant, "key"), "SPLIT; weight=#{to_str(weight)}"}}
-
-        false ->
-          {:cont, limit}
-      end
-    end)
-    |> case do
-      limit when is_number(limit) -> {Map.get(feature, "value"), "control", reason}
-      selected -> selected
+    case Enum.find(splits, fn {start, limit, _} -> start <= percentage and percentage < limit end) do
+      {_start, _limit, selected} -> selected
+      nil -> {Map.get(feature, "value"), "control", reason}
     end
   end
+
+  # variants sorted into ranges of percentages, each with its flag value, variant and reason
+  defp prepare_feature(%{"variants" => [_ | _] = variants} = feature) do
+    {splits, _limit} =
+      variants
+      |> Enum.sort_by(&Map.get(&1, "priority"))
+      |> Enum.map_reduce(0, fn %{"weight" => weight} = variant, start ->
+        limit = weight + start
+
+        selected =
+          {Map.get(variant, "value"), Map.get(variant, "key"), "SPLIT; weight=#{to_str(weight)}"}
+
+        {{start, limit, selected}, limit}
+      end)
+
+    Map.put(feature, :splits, splits)
+  end
+
+  defp prepare_feature(feature), do: feature
 
   defp read_flag(evaluation, state, feature_name) do
     case state.resolved do
@@ -458,7 +470,8 @@ defmodule Flagsmith.Engine.Evaluator do
   defp segment_override(evaluation, state, feature_name) do
     evaluation.segment_keys_by_feature_name
     |> Map.get(feature_name, [])
-    |> Enum.reduce({nil, state}, fn segment_key, {override, state} ->
+    |> Enum.reduce({evaluation.identity_overrides[feature_name], state}, fn segment_key,
+                                                                            {override, state} ->
       case matches_segment?(evaluation, state, segment_key) do
         {false, state} ->
           {override, state}

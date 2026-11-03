@@ -3,8 +3,6 @@ defmodule Flagsmith.Engine.Mappers do
 
   alias Flagsmith.Schemas.{Environment, Features, Identity, Segments, Traits}
 
-  @identity_overrides_segment_key "identity_overrides"
-
   @doc """
   Map an environment to an evaluation context for `Flagsmith.Engine.Evaluator`,
   without an identity.
@@ -52,46 +50,21 @@ defmodule Flagsmith.Engine.Mappers do
   end
 
   @doc """
-  Map the overrides of an identity to segments for an evaluation context,
-  taking precedence over any other.
+  Map the overrides of an identity to feature contexts, overriding those of any
+  segment for that identity.
   """
-  @spec map_identity_overrides_to_segments(Identity.t()) :: list({String.t(), map()})
-  def map_identity_overrides_to_segments(%Identity{identity_features: []}), do: []
-
-  def map_identity_overrides_to_segments(%Identity{
-        identifier: identifier,
-        identity_features: identity_features
-      }) do
-    [
-      {@identity_overrides_segment_key,
-       %{
-         "key" => @identity_overrides_segment_key,
-         "name" => @identity_overrides_segment_key,
-         "rules" => [
-           %{
-             "type" => "ALL",
-             "conditions" => [
-               %{
-                 "property" => "$.identity.identifier",
-                 "operator" => "IN",
-                 "value" => [identifier]
-               }
-             ]
-           }
-         ],
-         "overrides" =>
-           Enum.map(identity_features, fn %Features.FeatureState{} = feature_state ->
-             %{
-               "key" => "",
-               "name" => feature_state.feature.name,
-               "enabled" => feature_state.enabled,
-               "value" => feature_state.feature_state_value,
-               "priority" => :negative_infinity,
-               "metadata" => %{feature_state: feature_state}
-             }
-           end)
-       }}
-    ]
+  @spec map_identity_overrides(Identity.t()) :: list(map())
+  def map_identity_overrides(%Identity{identity_features: identity_features}) do
+    Enum.map(identity_features, fn %Features.FeatureState{} = feature_state ->
+      %{
+        "key" => "",
+        "name" => feature_state.feature.name,
+        "enabled" => feature_state.enabled,
+        "value" => feature_state.feature_state_value,
+        "priority" => :negative_infinity,
+        "metadata" => %{feature_state: feature_state}
+      }
+    end)
   end
 
   defp map_trait(%Traits.Trait{trait_key: key, trait_value: %Traits.Trait.Value{value: value}}),

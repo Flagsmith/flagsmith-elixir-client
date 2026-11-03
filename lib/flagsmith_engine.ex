@@ -14,6 +14,8 @@ defmodule Flagsmith.Engine do
   alias Flagsmith.Schemas.Types
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
   @prepared_environment_key {__MODULE__, :prepared_environment}
+  @environment_feature_states_key {__MODULE__, :environment_feature_states}
+  @identity_free_property_prefixes ["$.environment.", "$.environment[", "$.flags.", "$.flags["]
 
   @moduledoc false
 
@@ -33,13 +35,17 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get the feature states of an `t:Flagsmith.Schemas.Environment.t/0`.
+  Get the feature states of an `t:Flagsmith.Schemas.Environment.t/0`, evaluated
+  without an identity. Segments that need an identity to match are left out.
   """
   @spec get_environment_feature_states(Environment.t()) :: list(Environment.FeatureState.t())
-  def get_environment_feature_states(%Environment{
-        feature_states: feature_states,
-        project: %Environment.Project{hide_disabled_flags: hide_disabled_flags}
-      }) do
+  def get_environment_feature_states(
+        %Environment{
+          project: %Environment.Project{hide_disabled_flags: hide_disabled_flags}
+        } = env
+      ) do
+    feature_states = evaluate_environment(env)
+
     case hide_disabled_flags do
       false -> feature_states
       true -> Enum.filter(feature_states, & &1.enabled)
@@ -48,12 +54,12 @@ defmodule Flagsmith.Engine do
 
   @doc """
   Get a specific feature state for a given feature_name in a given 
-  `t:Flagsmith.Schemas.Environment.t/0`.
+  `t:Flagsmith.Schemas.Environment.t/0`, evaluated without an identity.
   """
   @spec get_environment_feature_state(Environment.t(), name :: String.t()) ::
           Environment.FeatureState.t() | nil
-  def get_environment_feature_state(%Environment{feature_states: fs}, name),
-    do: Enum.find(fs, fn %{feature: %{name: f_name}} -> f_name == name end)
+  def get_environment_feature_state(%Environment{} = env, name),
+    do: Enum.find(evaluate_environment(env), fn %{feature: %{name: f_name}} -> f_name == name end)
 
   @doc """
   Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
@@ -70,13 +76,7 @@ defmodule Flagsmith.Engine do
         override_traits \\ []
       ) do
     %{"flags" => flags} = evaluate_identity(env, identity, override_traits, flags: true)
-
-    Enum.map(fs, fn %{feature: %{name: name}} ->
-      %{"enabled" => enabled, "value" => value, "metadata" => %{feature_state: feature_state}} =
-        Map.fetch!(flags, name)
-
-      %{feature_state | enabled: enabled, feature_state_value: value}
-    end)
+    to_feature_states(fs, flags)
   end
 
   @doc """
@@ -100,21 +100,64 @@ defmodule Flagsmith.Engine do
     |> prepare_environment()
     |> Evaluator.evaluate(
       Mappers.map_identity_to_context(env, identity, override_traits),
-      [{:segments, Mappers.map_identity_overrides_to_segments(identity)} | opts]
+      [{:identity_overrides, Mappers.map_identity_overrides(identity)} | opts]
     )
   end
 
-  # kept per process for the environment last evaluated, an unchanged one being the same term
+  defp evaluate_environment(%Environment{feature_states: fs} = env) do
+    cached(@environment_feature_states_key, env, fn ->
+      %{"flags" => flags} =
+        env
+        |> Mappers.map_environment_to_context()
+        |> Map.update!("segments", fn segments ->
+          Enum.filter(segments, fn {_key, %{"rules" => rules}} -> identity_free?(rules) end)
+        end)
+        |> Evaluator.get_evaluation_result()
+
+      to_feature_states(fs, flags)
+    end)
+  end
+
   defp prepare_environment(env) do
-    case Process.get(@prepared_environment_key) do
-      {^env, prepared} ->
-        prepared
+    cached(@prepared_environment_key, env, fn ->
+      env |> Mappers.map_environment_to_context() |> Evaluator.prepare()
+    end)
+  end
+
+  # kept per process for the environment last evaluated, an unchanged one being the same term
+  defp cached(key, env, fun) do
+    case Process.get(key) do
+      {^env, value} ->
+        value
 
       _ ->
-        prepared = env |> Mappers.map_environment_to_context() |> Evaluator.prepare()
-        Process.put(@prepared_environment_key, {env, prepared})
-        prepared
+        value = fun.()
+        Process.put(key, {env, value})
+        value
     end
+  end
+
+  defp identity_free?(rules) do
+    Enum.all?(rules, fn %{"conditions" => conditions, "rules" => rules} ->
+      Enum.all?(
+        conditions,
+        &String.starts_with?(&1["property"], @identity_free_property_prefixes)
+      ) and
+        identity_free?(rules)
+    end)
+  end
+
+  defp to_feature_states(feature_states, flags) do
+    Enum.map(feature_states, fn %{feature: %{name: name}} ->
+      case Map.fetch!(flags, name) do
+        %{"enabled" => enabled, "value" => value, "metadata" => %{feature_state: feature_state}}
+        when enabled === feature_state.enabled and value === feature_state.feature_state_value ->
+          feature_state
+
+        %{"enabled" => enabled, "value" => value, "metadata" => %{feature_state: feature_state}} ->
+          %{feature_state | enabled: enabled, feature_state_value: value}
+      end
+    end)
   end
 
   @doc """
