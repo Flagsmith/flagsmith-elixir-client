@@ -27,14 +27,18 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [
-      :identity,
-      :id,
-      :feature_state_value,
-      :feature_segment,
-      :environment,
-      :enabled
-    ])
+    |> cast(
+      params,
+      [
+        :identity,
+        :id,
+        :feature_state_value,
+        :feature_segment,
+        :environment,
+        :enabled
+      ],
+      empty_values: []
+    )
     |> cast_embed(:feature, required: true)
   end
 

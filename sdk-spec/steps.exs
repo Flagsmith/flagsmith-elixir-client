@@ -16,6 +16,29 @@ defmodule SDKSpec.Steps do
     Client.new(environment_key: environment_key, api_url: api_url)
   end
 
+  # Create the SDK client with local evaluation
+  def create_client_with_local_evaluation(environment_key, api_url) do
+    client =
+      Client.new(
+        environment_key: environment_key,
+        api_url: api_url,
+        enable_local_evaluation: true
+      )
+
+    with :ok <- start_supervisor(),
+         {:ok, _environment} <- Client.get_environment(client) do
+      {:ok, client}
+    end
+  end
+
+  defp start_supervisor do
+    case Flagsmith.Supervisor.start_link() do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      error -> error
+    end
+  end
+
   # When the application gets the environment flags
   def get_environment_flags(client) do
     with {:ok, flags} <- Client.get_environment_flags(client) do

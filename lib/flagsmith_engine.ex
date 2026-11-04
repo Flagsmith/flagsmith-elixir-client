@@ -10,8 +10,13 @@ defmodule Flagsmith.Engine do
   }
 
   alias Traits.Trait
+  alias Flagsmith.Engine.{EvaluationResult, Evaluator, Mappers}
+  alias Flagsmith.Engine.EvaluationResult.{FlagResult, SegmentResult}
   alias Flagsmith.Schemas.Types
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
+  @prepared_environment_key {__MODULE__, :prepared_environment}
+  @environment_feature_states_key {__MODULE__, :environment_feature_states}
+  @identity_free_property_prefixes ["$.environment.", "$.environment[", "$.flags.", "$.flags["]
 
   @moduledoc false
 
@@ -31,13 +36,17 @@ defmodule Flagsmith.Engine do
   end
 
   @doc """
-  Get the feature states of an `t:Flagsmith.Schemas.Environment.t/0`.
+  Get the feature states of an `t:Flagsmith.Schemas.Environment.t/0`, evaluated
+  without an identity. Segments that need an identity to match are left out.
   """
   @spec get_environment_feature_states(Environment.t()) :: list(Environment.FeatureState.t())
-  def get_environment_feature_states(%Environment{
-        feature_states: feature_states,
-        project: %Environment.Project{hide_disabled_flags: hide_disabled_flags}
-      }) do
+  def get_environment_feature_states(
+        %Environment{
+          project: %Environment.Project{hide_disabled_flags: hide_disabled_flags}
+        } = env
+      ) do
+    feature_states = evaluate_environment(env)
+
     case hide_disabled_flags do
       false -> feature_states
       true -> Enum.filter(feature_states, & &1.enabled)
@@ -46,12 +55,12 @@ defmodule Flagsmith.Engine do
 
   @doc """
   Get a specific feature state for a given feature_name in a given 
-  `t:Flagsmith.Schemas.Environment.t/0`.
+  `t:Flagsmith.Schemas.Environment.t/0`, evaluated without an identity.
   """
   @spec get_environment_feature_state(Environment.t(), name :: String.t()) ::
           Environment.FeatureState.t() | nil
-  def get_environment_feature_state(%Environment{feature_states: fs}, name),
-    do: Enum.find(fs, fn %{feature: %{name: f_name}} -> f_name == name end)
+  def get_environment_feature_state(%Environment{} = env, name),
+    do: Enum.find(evaluate_environment(env), fn %{feature: %{name: f_name}} -> f_name == name end)
 
   @doc """
   Get list of feature states for a given `t:Flagsmith.Schemas.Identity.t/0` in a 
@@ -61,24 +70,16 @@ defmodule Flagsmith.Engine do
           Environment.t(),
           Identity.t(),
           override_traits :: list(Traits.Trait.t())
-        ) :: list(Environment.FeatureState.t())
+        ) :: list(Environment.FeatureState.t() | Features.FeatureState.t())
   def get_identity_feature_states(
-        %Environment{
-          feature_states: fs,
-          project: %Environment.Project{segments: segments}
-        } = env,
-        %Identity{identity_features: identity_features} = identity,
+        %Environment{feature_states: fs} = env,
+        %Identity{} = identity,
         override_traits \\ []
       ) do
-    with identity <- Identity.set_env_key(identity, env),
-         segment_features <-
-           get_identity_applicable_segments(segments, identity, override_traits),
-         prioritized <- clean_segments_by_priority(segment_features),
-         replaced <- replace_segment_features(fs, prioritized),
-         pre_features <- replace_identity_features(replaced, identity_features),
-         final_features <- replace_multivariates(pre_features, identity) do
-      final_features
-    end
+    %EvaluationResult{flags: flags} =
+      evaluate_identity(env, identity, override_traits, flags: true)
+
+    to_feature_states(fs, flags)
   end
 
   @doc """
@@ -90,158 +91,75 @@ defmodule Flagsmith.Engine do
           Identity.t(),
           override_traits :: list(Traits.Trait.t())
         ) :: list(Segments.IdentitySegment.t())
-  def get_identity_segments(
-        %Environment{
-          project: %Environment.Project{segments: segments}
-        } = env,
-        identity,
-        override_traits \\ []
-      ) do
-    with identity <- Identity.set_env_key(identity, env),
-         segments <-
-           get_identity_applicable_segments(segments, identity, override_traits),
-         replaced <- Enum.map(segments, &Segments.IdentitySegment.from_segment/1) do
-      replaced
+  def get_identity_segments(%Environment{} = env, identity, override_traits \\ []) do
+    %EvaluationResult{segments: segments} =
+      evaluate_identity(env, identity, override_traits, flags: false)
+
+    for %SegmentResult{metadata: %{segment: segment}} <- segments,
+        do: Segments.IdentitySegment.from_segment(segment)
+  end
+
+  defp evaluate_identity(env, identity, override_traits, opts) do
+    env
+    |> prepare_environment()
+    |> Evaluator.evaluate(
+      Mappers.map_identity_to_context(env, identity, override_traits),
+      [{:identity_overrides, Mappers.map_identity_overrides(identity)} | opts]
+    )
+  end
+
+  defp evaluate_environment(%Environment{feature_states: fs} = env) do
+    cached(@environment_feature_states_key, env, fn ->
+      %EvaluationResult{flags: flags} =
+        env
+        |> Mappers.map_environment_to_context()
+        |> Map.update!("segments", fn segments ->
+          Enum.filter(segments, fn {_key, %{"rules" => rules}} -> identity_free?(rules) end)
+        end)
+        |> Evaluator.get_evaluation_result()
+
+      to_feature_states(fs, flags)
+    end)
+  end
+
+  defp prepare_environment(env) do
+    cached(@prepared_environment_key, env, fn ->
+      env |> Mappers.map_environment_to_context() |> Evaluator.prepare()
+    end)
+  end
+
+  # kept per process for the environment last evaluated, an unchanged one being the same term
+  defp cached(key, env, fun) do
+    case Process.get(key) do
+      {^env, value} ->
+        value
+
+      _ ->
+        value = fun.()
+        Process.put(key, {env, value})
+        value
     end
   end
 
-  defp clean_segments_by_priority(segments) do
-    # keep an ordered table by index so we can retrieve the segments in order
-    # at the end when manipulating them
-    table_segments = :ets.new(:temp_segments, [:ordered_set])
-    # keep a table to track the feature_states by name so we can compare in case
-    # of same name fs_s
-    table_features = :ets.new(:temp_track, [])
-
-    # reduce through all the segments, using an accumulator for keeping track of the
-    # current index of the segment
-    Enum.reduce(segments, 0, fn %Segments.Segment{feature_states: segment_fs} = segment, index ->
-      # for each segment, iterate through those segment's feature states
-      Enum.each(segment_fs, fn %Environment.FeatureState{feature: feature} = fs ->
-        # lookup on the tracking table if we have an item by the feature name
-        case :ets.lookup(table_features, feature.name) do
-          [] ->
-            # if we don't, then we insert the initial one, keyed by name, and with
-            # the full feature_state, index, and an empty list
-            :ets.insert(table_features, {feature.name, fs, index, []})
-
-          # if we do then we check if the existing one in the table is higher
-          # priority than the current one being iterated
-          [{_, %Environment.FeatureState{} = existing, existing_index, to_rem}] ->
-            case Environment.FeatureState.is_higher_priority?(existing, fs) do
-              true ->
-                # if it's then it means the current one, will need to be removed
-                # and as such we add the current iteration index to the list to
-                # remove but keep the other tuple elements as they were
-                :ets.insert(
-                  table_features,
-                  {feature.name, existing, existing_index, [index | to_rem]}
-                )
-
-              false ->
-                # if it's not, then we re-insert the tuple (since it's a set table
-                # using the same key, feature.name, will replace the existing item)
-                # but we now substitute the feature state by the current one,
-                # the index by the current one, and instead add the existing one
-                # (the one that was previously the highest priority one) to the list
-                # to be removed
-                :ets.insert(
-                  table_features,
-                  {feature.name, fs, index, [existing_index | to_rem]}
-                )
-            end
-        end
-      end)
-
-      # finally we insert the segment, keyed by the index (so it keeps the order as
-      # the segments table is an ordered set), but unmodified
-      # this first iteration is just to find any duplicate feature states
-      :ets.insert(table_segments, {index, segment})
-
-      # lastly we increment the accumulator by one so next iteration has the correct
-      # index
-      index + 1
+  defp identity_free?(rules) do
+    Enum.all?(rules, fn %{"conditions" => conditions, "rules" => rules} ->
+      Enum.all?(
+        conditions,
+        &String.starts_with?(&1["property"], @identity_free_property_prefixes)
+      ) and
+        identity_free?(rules)
     end)
-
-    # now we convert the tracking table into a list and iterate through it
-    :ets.tab2list(table_features)
-    |> Enum.each(fn
-      {_name, _, _index, []} ->
-        # feature state has no conflicting states because the to remove list is empty
-        :ok
-
-      {name, %Environment.FeatureState{featurestate_uuid: uuid}, _index, to_remove} ->
-        # since we have the name, full feature state, and a list of indexes
-        # corresponding to segments that had this same feature state but with lower
-        # priority we iterate the list of the indexes
-        Enum.each(to_remove, fn index ->
-          # we grab the segment for that index from the segments table
-          [{_, %Segments.Segment{feature_states: segment_fs} = segment}] =
-            :ets.lookup(table_segments, index)
-
-          # and now we filter the feature states of that segment, that match the name
-          # of this one, but not the uuid
-          new_segment_fs =
-            Enum.reject(segment_fs, fn %Environment.FeatureState{feature: feature} = fs ->
-              feature.name == name && uuid != fs.featurestate_uuid
-            end)
-
-          # and lastly we replace that segment in the segments table, with the new
-          # filtered feature states
-          :ets.insert(table_segments, {index, %{segment | feature_states: new_segment_fs}})
-        end)
-    end)
-
-    # lastly we fold through the right side (since it's an ordered set, it will go
-    # from smaller to bigger, and folding through the right starts at the end)
-    # and we just accumulate all segments into a new list
-    # since the segments in this table were updated in the last step we get the
-    # "cleaned" of duplicate features list of segments in the same original order
-    final_segments =
-      :ets.foldr(fn {_index, segment}, acc -> [segment | acc] end, [], table_segments)
-
-    :ets.delete(table_segments)
-    :ets.delete(table_features)
-
-    final_segments
   end
 
-  defp replace_multivariates(features, %Identity{} = identity) do
-    features
-    |> Enum.map(fn %{feature: %{type: type}} = feature_state ->
-      case type do
-        "MULTIVARIATE" ->
-          uuid = Environment.FeatureState.get_hashing_id(feature_state)
-
-          mv_fs = Map.get(feature_state, :multivariate_feature_state_values, [])
-
-          percentage = percentage_from_ids([uuid, Identity.composite_key(identity)])
-
-          case find_first_multivariate(mv_fs, percentage) do
-            {:ok, new_value} -> %{feature_state | feature_state_value: new_value}
-            _ -> feature_state
-          end
-
-        _ ->
+  defp to_feature_states(feature_states, flags) do
+    Enum.map(feature_states, fn %{feature: %{name: name}} ->
+      case Map.fetch!(flags, name) do
+        %FlagResult{enabled: enabled, value: value, metadata: %{feature_state: feature_state}}
+        when enabled === feature_state.enabled and value === feature_state.feature_state_value ->
           feature_state
-      end
-    end)
-  end
 
-  defp find_first_multivariate(mvs, percentage) do
-    mvs
-    |> Enum.sort_by(fn %{id: id, mv_fs_value_uuid: uuid} ->
-      case id do
-        nil -> uuid
-        _ -> id
-      end
-    end)
-    |> Enum.reduce_while(0, fn %{percentage_allocation: p_allot} = mv, start_perc ->
-      limit = p_allot + start_perc
-
-      case start_perc <= percentage and percentage < limit do
-        true -> {:halt, Environment.FeatureState.extract_multivariate_value(mv)}
-        _ -> {:cont, limit}
+        %FlagResult{enabled: enabled, value: value, metadata: %{feature_state: feature_state}} ->
+          %{feature_state | enabled: enabled, feature_state_value: value}
       end
     end)
   end

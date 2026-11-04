@@ -300,7 +300,7 @@ defmodule Flagsmith.Client.Test do
                      enabled: true,
                      feature_id: 17985,
                      feature_name: "secret_button",
-                     value: nil
+                     value: ""
                    },
                    "test_identity" => %Schemas.Flag{
                      enabled: true,
