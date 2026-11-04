@@ -3,7 +3,8 @@ defmodule Flagsmith.Engine.EngineTestData.Test do
 
   import Mox, only: [stub_with: 2]
 
-  alias Flagsmith.Engine.Evaluator
+  alias Flagsmith.Engine.{EvaluationResult, Evaluator}
+  alias Flagsmith.Engine.EvaluationResult.{FlagResult, SegmentResult}
 
   @test_cases_path Path.join([File.cwd!(), "test/support/engine-test-data/test_cases"])
   @test_case_paths @test_cases_path |> Path.join("*.json*") |> Path.wildcard() |> Enum.sort()
@@ -50,8 +51,18 @@ defmodule Flagsmith.Engine.EngineTestData.Test do
       |> put_entries("features", test_case["context"]["features"])
       |> put_entries("segments", test_case["context"]["segments"])
 
-    %{"context" => context, "result" => to_map(test_case["result"])}
+    %{"context" => context, "result" => to_result(to_map(test_case["result"]))}
   end
+
+  defp to_result(%{"flags" => flags, "segments" => segments}) do
+    %EvaluationResult{
+      flags: Map.new(flags, fn {name, flag} -> {name, to_struct(FlagResult, flag)} end),
+      segments: Enum.map(segments, &to_struct(SegmentResult, &1))
+    }
+  end
+
+  defp to_struct(module, fields),
+    do: struct!(module, Map.new(fields, fn {key, value} -> {String.to_atom(key), value} end))
 
   defp put_entries(context, _key, nil), do: context
 

@@ -10,7 +10,8 @@ defmodule Flagsmith.Engine do
   }
 
   alias Traits.Trait
-  alias Flagsmith.Engine.{Evaluator, Mappers}
+  alias Flagsmith.Engine.{EvaluationResult, Evaluator, Mappers}
+  alias Flagsmith.Engine.EvaluationResult.{FlagResult, SegmentResult}
   alias Flagsmith.Schemas.Types
   @condition_operators Flagsmith.Schemas.Types.Operator.values(:atoms)
   @prepared_environment_key {__MODULE__, :prepared_environment}
@@ -75,7 +76,9 @@ defmodule Flagsmith.Engine do
         %Identity{} = identity,
         override_traits \\ []
       ) do
-    %{"flags" => flags} = evaluate_identity(env, identity, override_traits, flags: true)
+    %EvaluationResult{flags: flags} =
+      evaluate_identity(env, identity, override_traits, flags: true)
+
     to_feature_states(fs, flags)
   end
 
@@ -89,9 +92,10 @@ defmodule Flagsmith.Engine do
           override_traits :: list(Traits.Trait.t())
         ) :: list(Segments.IdentitySegment.t())
   def get_identity_segments(%Environment{} = env, identity, override_traits \\ []) do
-    %{"segments" => segments} = evaluate_identity(env, identity, override_traits, flags: false)
+    %EvaluationResult{segments: segments} =
+      evaluate_identity(env, identity, override_traits, flags: false)
 
-    for %{"metadata" => %{segment: segment}} <- segments,
+    for %SegmentResult{metadata: %{segment: segment}} <- segments,
         do: Segments.IdentitySegment.from_segment(segment)
   end
 
@@ -106,7 +110,7 @@ defmodule Flagsmith.Engine do
 
   defp evaluate_environment(%Environment{feature_states: fs} = env) do
     cached(@environment_feature_states_key, env, fn ->
-      %{"flags" => flags} =
+      %EvaluationResult{flags: flags} =
         env
         |> Mappers.map_environment_to_context()
         |> Map.update!("segments", fn segments ->
@@ -150,11 +154,11 @@ defmodule Flagsmith.Engine do
   defp to_feature_states(feature_states, flags) do
     Enum.map(feature_states, fn %{feature: %{name: name}} ->
       case Map.fetch!(flags, name) do
-        %{"enabled" => enabled, "value" => value, "metadata" => %{feature_state: feature_state}}
+        %FlagResult{enabled: enabled, value: value, metadata: %{feature_state: feature_state}}
         when enabled === feature_state.enabled and value === feature_state.feature_state_value ->
           feature_state
 
-        %{"enabled" => enabled, "value" => value, "metadata" => %{feature_state: feature_state}} ->
+        %FlagResult{enabled: enabled, value: value, metadata: %{feature_state: feature_state}} ->
           %{feature_state | enabled: enabled, feature_state_value: value}
       end
     end)

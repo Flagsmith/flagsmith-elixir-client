@@ -1,12 +1,12 @@
 defmodule Flagsmith.Engine.Evaluator do
   @moduledoc false
 
+  alias Flagsmith.Engine.EvaluationResult
+  alias Flagsmith.Engine.EvaluationResult.{FlagResult, SegmentResult}
   alias Flagsmith.Engine.JSONPath
 
   @type context :: map()
   @type prepared :: map()
-  @type flag_result :: %{String.t() => term()}
-  @type result :: %{String.t() => term()}
 
   @circular_dependency_reason "ERROR; code=CIRCULAR_DEPENDENCY"
   @identity_overrides_segment_name "identity_overrides"
@@ -25,7 +25,7 @@ defmodule Flagsmith.Engine.Evaluator do
   Get the flags and matching segments for an evaluation context, as specified by
   https://github.com/Flagsmith/engine-test-data.
 
-  Contexts and results are maps with string keys, matching their JSON form.
+  Contexts are maps with string keys, matching their JSON form.
   `features` and `segments` may also be given as lists of `{key, value}` tuples,
   to keep the order that decides override ties and the order of segment results.
 
@@ -33,7 +33,7 @@ defmodule Flagsmith.Engine.Evaluator do
   read this way is resolved with its own segment overrides, and features in a
   dependency cycle are reported as `ERROR; code=CIRCULAR_DEPENDENCY`.
   """
-  @spec get_evaluation_result(context()) :: result()
+  @spec get_evaluation_result(context()) :: EvaluationResult.t()
   def get_evaluation_result(context) do
     context
     |> prepare()
@@ -84,7 +84,7 @@ defmodule Flagsmith.Engine.Evaluator do
       as the overrides of a segment that the identity matches
     * `:flags` - whether to evaluate flags, or only segments. Defaults to `true`
   """
-  @spec evaluate(prepared(), map() | nil, keyword()) :: result()
+  @spec evaluate(prepared(), map() | nil, keyword()) :: EvaluationResult.t()
   def evaluate(prepared, identity, opts \\ []) do
     identity = enrich_identity(identity, prepared.environment_key)
 
@@ -123,7 +123,7 @@ defmodule Flagsmith.Engine.Evaluator do
         false -> %{}
       end
 
-    %{"flags" => flags, "segments" => segment_results}
+    %EvaluationResult{flags: flags, segments: segment_results}
   end
 
   defp entries(nil), do: []
@@ -290,12 +290,8 @@ defmodule Flagsmith.Engine.Evaluator do
     {Enum.reverse(results), Map.merge(overrides, evaluation.identity_overrides), state}
   end
 
-  defp segment_result(%{"name" => name} = segment) do
-    case Map.get(segment, "metadata") do
-      metadata when metadata in [nil, %{}] -> %{"name" => name}
-      metadata -> %{"name" => name, "metadata" => metadata}
-    end
-  end
+  defp segment_result(%{"name" => name} = segment),
+    do: %SegmentResult{name: name, metadata: metadata(segment)}
 
   # lower priority wins, the first seen wins a tie
   defp wins_over?(%{name: name, priority: priority}, overrides) do
@@ -344,7 +340,7 @@ defmodule Flagsmith.Engine.Evaluator do
         Enum.reduce(state.cyclic, Map.merge(flags, state.resolved), fn feature_name, flags ->
           case flags do
             %{^feature_name => flag} ->
-              Map.put(flags, feature_name, %{flag | "reason" => @circular_dependency_reason})
+              Map.put(flags, feature_name, %FlagResult{flag | reason: @circular_dependency_reason})
 
             _ ->
               flags
@@ -372,17 +368,20 @@ defmodule Flagsmith.Engine.Evaluator do
           {Map.get(feature, "value"), nil, reason}
       end
 
-    result = %{
-      "enabled" => Map.get(feature, "enabled"),
-      "name" => Map.get(feature, "name"),
-      "reason" => reason,
-      "value" => value,
-      "variant" => variant
+    %FlagResult{
+      enabled: Map.get(feature, "enabled"),
+      name: Map.get(feature, "name"),
+      reason: reason,
+      value: value,
+      variant: variant,
+      metadata: metadata(feature)
     }
+  end
 
-    case Map.get(feature, "metadata") do
-      metadata when metadata in [nil, %{}] -> result
-      metadata -> Map.put(result, "metadata", metadata)
+  defp metadata(context) do
+    case Map.get(context, "metadata") do
+      metadata when metadata == %{} -> nil
+      metadata -> metadata
     end
   end
 
@@ -697,14 +696,21 @@ defmodule Flagsmith.Engine.Evaluator do
 
   defp query(evaluation, state, [{:name, "flags"}, {:name, feature_name} | segments]) do
     {flag, state} = read_flag(evaluation, state, feature_name)
-    {find_value(flag, segments), state}
+    {find_value(json_form(flag), segments), state}
   end
 
-  defp query(_evaluation, state, [{:name, "flags"} | segments]),
-    do: {find_value(state.resolved, segments), state}
+  defp query(_evaluation, state, [{:name, "flags"} | segments]) do
+    flags = Map.new(state.resolved, fn {name, flag} -> {name, json_form(flag)} end)
+    {find_value(flags, segments), state}
+  end
 
   defp query(evaluation, state, segments),
     do: {find_value(evaluation.context, segments), state}
+
+  defp json_form(nil), do: nil
+
+  defp json_form(%FlagResult{} = flag),
+    do: Map.new(Map.from_struct(flag), fn {field, value} -> {Atom.to_string(field), value} end)
 
   defp find_value(nil, _segments), do: nil
 
