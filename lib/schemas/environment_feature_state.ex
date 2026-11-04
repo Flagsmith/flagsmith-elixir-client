@@ -27,7 +27,9 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [:featurestate_uuid, :enabled, :django_id, :feature_state_value])
+    |> cast(params, [:featurestate_uuid, :enabled, :django_id, :feature_state_value],
+      empty_values: []
+    )
     |> cast_embed(:feature)
     |> cast_embed(:feature_segment)
     |> cast_embed(:multivariate_feature_state_values)

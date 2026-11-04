@@ -381,7 +381,7 @@ defmodule Flagsmith.Client.Poller.Test do
                   "secret_button" => %Flagsmith.Schemas.Flag{
                     enabled: true,
                     feature_name: "secret_button",
-                    value: nil
+                    value: ""
                   },
                   "test_identity" => %Flagsmith.Schemas.Flag{
                     enabled: true,
@@ -423,7 +423,7 @@ defmodule Flagsmith.Client.Poller.Test do
               }} = Flagsmith.Client.get_identity_flags(config, "atest12120", [])
 
       # the same id (meaning it should hash to the same things, but now passing a trait
-      # results in a the secret_button being nil according to another segment rule
+      # results in a the secret_button being empty according to another segment rule
       # since the only thing that changes is providing traits to the function it
       # should assert that indeed traits affect the final resolution of the flags
       assert {:ok,
@@ -443,7 +443,7 @@ defmodule Flagsmith.Client.Poller.Test do
                   "secret_button" => %Flagsmith.Schemas.Flag{
                     enabled: true,
                     feature_name: "secret_button",
-                    value: nil
+                    value: ""
                   },
                   "test_identity" => %Flagsmith.Schemas.Flag{
                     enabled: true,
@@ -474,7 +474,7 @@ defmodule Flagsmith.Client.Poller.Test do
                   "secret_button" => %Flagsmith.Schemas.Flag{
                     enabled: true,
                     feature_name: "secret_button",
-                    value: nil
+                    value: ""
                   },
                   "test_identity" => %Flagsmith.Schemas.Flag{
                     enabled: false,

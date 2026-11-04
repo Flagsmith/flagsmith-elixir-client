@@ -16,7 +16,7 @@ defmodule Flagsmith.Schemas.Environment.MultivariateFeatureOption do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [:id, :value])
+    |> cast(params, [:id, :value], empty_values: [])
   end
 
   @doc false

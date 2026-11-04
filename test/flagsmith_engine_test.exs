@@ -104,7 +104,7 @@ defmodule Flagsmith.EngineTest do
                           name: "secret_button",
                           type: "STANDARD"
                         },
-                        feature_state_value: nil,
+                        feature_state_value: "",
                         featurestate_uuid: "3b58d149-fdb3-4815-b537-6583291523dd",
                         multivariate_feature_state_values: []
                       }
@@ -141,7 +141,7 @@ defmodule Flagsmith.EngineTest do
                           name: "secret_button",
                           type: "STANDARD"
                         },
-                        feature_state_value: nil,
+                        feature_state_value: "",
                         featurestate_uuid: "adb486aa-563d-4b1d-9f72-bf5b210bf94f",
                         multivariate_feature_state_values: []
                       }
