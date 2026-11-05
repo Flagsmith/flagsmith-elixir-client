@@ -148,6 +148,21 @@ false = Flagsmith.Client.is_feature_enabled("my-other-feature-b")
 
 When you enable analytics reporting, besides having to start the `Flagsmith.Supervisor` for it to work, you need to query for flags/features/features values through the exposed functions in `Flagsmith.Client.get_flag/2` `Flagsmith.Client.is_feature_enabled/2` and `Flagsmith.Client.get_feature_value/2`. This will update the tracking of the number of times they're accessed.
 
+#### Experiments & Events
+
+To measure experiments, enable events and start the `Flagsmith.Supervisor`. Getting a flag with `Flagsmith.Client.get_experiment_flag/4` records which variant the identity was served, and `Flagsmith.Client.track_event/3` records what the identity did:
+
+```elixir
+config = Flagsmith.Client.new(environment_key: "MY_SDK_KEY", enable_events: true)
+
+%Flagsmith.Schemas.Flag{value: "hello treatment"} =
+  Flagsmith.Client.get_experiment_flag(config, "banner", "user-a", [%{trait_key: "plan", trait_value: "premium"}])
+
+:ok = Flagsmith.Client.track_event(config, "checkout_completed", identifier: "user-a", value: 42, metadata: %{currency: "GBP"})
+```
+
+Events are sent in batches, every `events_flush_interval_milliseconds`.
+
 #### Identity & Traits
 
 When using local evaluation with identity based requests the provided traits will not be updated on the Flagsmith platform, and to properly calculate the flags for an identity you need to provide any relevant trait as well. For instance, to get the `flags` for the identity `"user-a"` with a given trait:
@@ -202,3 +217,9 @@ And obviously, if the identity has that trait and you do the regular API call wi
 - `retries` -> the number of times the http adapter is allowed to retry failed calls to the Flagsmith API before deeming the response failed. Keep in mind that with local_evaluation and analytics, even if the requests fail after whatever number of retries you set here, they will keep being retried as their time-cycle resets (for the poller whatever is the environment_refresh_interval_milliseconds, for the analytics they're batched, and a dump is tried every 1 minute)
 
 - `enable_analytics` -> track feature queries by reporting automatically to the Flagsmith API analytics endpoint queries and lookups to features. This only works when using the `Flagsmith.Client` module functions such as `is_feature_enabled`, `get_feature_value` and `get_flag`.
+
+- `enable_events` -> send experiment exposures and tracked events to the Flagsmith events API (defaults to `false`).
+
+- `events_api_url` -> the base url of the Flagsmith events API (defaults to: `"https://events.api.flagsmith.com/"`)
+
+- `events_flush_interval_milliseconds` -> the time to wait between sending batches of events (defaults to 10_000 milliseconds)
