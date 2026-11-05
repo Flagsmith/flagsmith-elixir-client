@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.4.0...v2.4.1) (2026-11-05)
+
+
+### Other
+
+* Let Renovate keep updating spec bumps the webhook handler commits to ([#70](https://github.com/Flagsmith/flagsmith-elixir-client/issues/70)) ([7bd7fbe](https://github.com/Flagsmith/flagsmith-elixir-client/commit/7bd7fbe48ecc0d990a749fbb0dfb4376d47c5575))
+
 ## [2.4.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.1...v2.4.0) (2026-11-04)
 
 
