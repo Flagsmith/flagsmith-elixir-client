@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.4.0...v2.5.0) (2026-11-10)
+
+
+### Features
+
+* **Events:** Experiment flags with exposure and event tracking ([#72](https://github.com/Flagsmith/flagsmith-elixir-client/issues/72)) ([6f1fa75](https://github.com/Flagsmith/flagsmith-elixir-client/commit/6f1fa75d2a6509714e1c72a4fc4e6ec07ceee617))
+
+
+### Other
+
+* Let Renovate keep updating spec bumps the webhook handler commits to ([#70](https://github.com/Flagsmith/flagsmith-elixir-client/issues/70)) ([7bd7fbe](https://github.com/Flagsmith/flagsmith-elixir-client/commit/7bd7fbe48ecc0d990a749fbb0dfb4376d47c5575))
+
 ## [2.4.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.3.1...v2.4.0) (2026-11-04)
 
 
