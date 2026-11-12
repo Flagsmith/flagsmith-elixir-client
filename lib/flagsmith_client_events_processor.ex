@@ -19,11 +19,23 @@ defmodule Flagsmith.Client.Events.Processor do
 
   @flag_exposure_event "$flag_exposure"
   @max_buffered_events 1000
+  @max_attempts 3
+  @request_timeout_milliseconds 3000
+  @retry_base_milliseconds if(Mix.env() == :test, do: 20, else: 1000)
+  @default_close_timeout_milliseconds 5000
+  # Statuses that a later attempt may not get, besides server errors.
+  @retried_statuses [408, 429]
+  # Statuses meaning the events API refuses the environment key.
+  @refused_statuses [401, 403]
 
   @enforce_keys [:configuration]
   defstruct [
     :configuration,
-    buffer: [],
+    buffer: :queue.new(),
+    buffered: 0,
+    # Whether events were tracked since the last attempt to send the buffer.
+    unsent: false,
+    refused: false,
     exposure_keys: MapSet.new()
   ]
 
@@ -60,13 +72,43 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   @doc """
-  Sends every buffered event to the Flagsmith events API, returning once done.
+  Sends the events tracked so far to the Flagsmith events API, retries included, and
+  returns once each of them has been delivered, dropped, or kept for the next flush.
+  Returns `:noop` when there is nothing to send, including when the buffer only holds
+  events already kept from a failed flush, which the next timed flush sends.
   """
   @spec flush(environment_key()) :: :ok | :noop | {:error, term()}
   def flush(environment_key) do
     case whereis(environment_key) do
-      pid when is_pid(pid) -> GenServer.call(pid, :flush)
+      pid when is_pid(pid) -> GenServer.call(pid, :flush, :infinity)
       :undefined -> :noop
+    end
+  end
+
+  @doc """
+  Sends the buffered events, and stops the processor, waiting for at most `timeout`
+  milliseconds. Events not sent by then are dropped.
+  """
+  @spec close(environment_key(), non_neg_integer()) :: :ok | :noop | {:error, term()}
+  def close(environment_key, timeout \\ @default_close_timeout_milliseconds) do
+    case whereis(environment_key) do
+      pid when is_pid(pid) ->
+        deadline = System.monotonic_time(:millisecond) + timeout
+
+        try do
+          GenServer.call(pid, {:close, deadline}, timeout)
+        catch
+          # The processor is still sending a batch: it stops once done, past the deadline.
+          :exit, {:timeout, _} ->
+            Logger.warning("Gave up sending events after #{timeout} milliseconds while closing")
+            {:error, :timeout}
+
+          :exit, {reason, _} when reason in [:noproc, :normal, :shutdown] ->
+            :noop
+        end
+
+      :undefined ->
+        :noop
     end
   end
 
@@ -113,6 +155,11 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   @impl GenServer
+  def handle_cast({:track, event}, %__MODULE__{refused: true} = data) do
+    Logger.debug("Not tracking #{event.event} event: the events API refused the environment key")
+    {:noreply, data}
+  end
+
   def handle_cast({:track, event}, %__MODULE__{} = data) do
     case exposure_key(event) do
       nil ->
@@ -137,14 +184,22 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   @impl GenServer
+  def handle_call(:flush, _from, %__MODULE__{unsent: false} = data),
+    do: {:reply, :noop, data}
+
   def handle_call(:flush, _from, %__MODULE__{} = data) do
-    {result, data} = do_flush(data)
+    {result, data} = do_flush(data, :infinity)
     {:reply, result, data}
+  end
+
+  def handle_call({:close, deadline}, _from, %__MODULE__{} = data) do
+    {result, _data} = do_flush(data, deadline)
+    {:stop, :normal, result, %{data | buffer: :queue.new(), buffered: 0}}
   end
 
   @impl GenServer
   def handle_info(:flush, %__MODULE__{configuration: config} = data) do
-    {_, data} = do_flush(data)
+    {_, data} = do_flush(data, :infinity)
     schedule_flush(config)
     {:noreply, data}
   end
@@ -152,40 +207,125 @@ defmodule Flagsmith.Client.Events.Processor do
   def handle_info(_, data), do: {:noreply, data}
 
   @impl GenServer
-  def terminate(_reason, %__MODULE__{} = data), do: do_flush(data)
+  def terminate(_reason, %__MODULE__{} = data) do
+    do_flush(data, System.monotonic_time(:millisecond) + @default_close_timeout_milliseconds)
+  end
 
   defp exposure_key(%{event: @flag_exposure_event} = event),
     do: {event.feature_name, event.identifier, event.value}
 
   defp exposure_key(_), do: nil
 
-  defp buffer(%__MODULE__{buffer: buffer} = data, event) do
-    data = %{data | buffer: [event | buffer]}
+  # A full buffer drops its oldest event for the new one. Filling it up sends it
+  # without waiting for the flush interval.
+  defp buffer(%__MODULE__{buffered: @max_buffered_events} = data, event) do
+    {{:value, dropped}, buffer} = :queue.out(data.buffer)
+    Logger.warning("Event buffer is full, dropping the oldest #{dropped.event} event")
+    %{data | buffer: :queue.in(event, buffer), unsent: true}
+  end
 
-    case length(data.buffer) >= @max_buffered_events do
-      true -> elem(do_flush(data), 1)
-      false -> data
+  defp buffer(%__MODULE__{} = data, event) do
+    data = %{
+      data
+      | buffer: :queue.in(event, data.buffer),
+        buffered: data.buffered + 1,
+        unsent: true
+    }
+
+    case data.buffered do
+      @max_buffered_events -> elem(do_flush(data, :infinity), 1)
+      _ -> data
     end
   end
 
-  defp do_flush(%__MODULE__{buffer: []} = data), do: {:noop, data}
+  defp do_flush(%__MODULE__{buffered: 0} = data, _deadline), do: {:noop, data}
 
-  defp do_flush(%__MODULE__{configuration: config, buffer: buffer} = data) do
-    events = Enum.reverse(buffer)
+  defp do_flush(%__MODULE__{configuration: config} = data, deadline) do
+    events = :queue.to_list(data.buffer)
+    sent = %{data | buffer: :queue.new(), buffered: 0, unsent: false, exposure_keys: MapSet.new()}
 
-    case Flagsmith.Client.events_track(config, events) do
-      {:ok, _} ->
-        {:ok, %{data | buffer: [], exposure_keys: MapSet.new()}}
+    case deliver(config, events, deadline, 1) do
+      :delivered ->
+        {:ok, sent}
 
-      {:error, reason} = error ->
-        Logger.warning("Failed to send events to Flagsmith, keeping them to retry",
+      {:dropped, reason} ->
+        {{:error, reason}, sent}
+
+      {:refused, reason} ->
+        Logger.error("The events API refused the environment key, stopping event tracking")
+        {{:error, reason}, %{sent | refused: true}}
+
+      {:kept, reason} ->
+        Logger.warning("Failed to send events to Flagsmith, keeping them for the next flush",
           reason: inspect(reason),
           events: length(events)
         )
 
-        {error, %{data | buffer: Enum.take(buffer, @max_buffered_events)}}
+        {{:error, reason}, %{data | unsent: false}}
     end
   end
+
+  # Sends a batch up to @max_attempts times, backing off with full jitter between
+  # attempts, until `deadline`. Returns what became of the batch: delivered, dropped
+  # (rejected by the events API, or failed with a 500 on its last attempt), refused
+  # (the events API refuses the environment key), or kept for the next flush.
+  defp deliver(config, events, deadline, attempt) do
+    case remaining(deadline) do
+      0 ->
+        {:kept, :timeout}
+
+      remaining ->
+        config
+        |> Flagsmith.Client.events_track(events, min(remaining, @request_timeout_milliseconds))
+        |> handle_attempt(config, events, deadline, attempt)
+    end
+  end
+
+  defp handle_attempt({:ok, status}, _, _, _, _) when status in 200..299, do: :delivered
+
+  defp handle_attempt({:ok, status}, _, _, _, _) when status in @refused_statuses,
+    do: {:refused, {:status, status}}
+
+  defp handle_attempt({:ok, status}, _, events, _, _)
+       when status < 500 and status not in @retried_statuses do
+    Logger.warning(
+      "The events API rejected #{length(events)} events with #{status}, dropping them"
+    )
+
+    {:dropped, {:status, status}}
+  end
+
+  defp handle_attempt({:ok, 500}, _, events, _, @max_attempts) do
+    Logger.warning("The events API failed #{length(events)} events with 500, dropping them")
+    {:dropped, {:status, 500}}
+  end
+
+  defp handle_attempt(result, _, _, _, @max_attempts), do: {:kept, failure(result)}
+
+  defp handle_attempt(result, config, events, deadline, attempt) do
+    Logger.warning(
+      "Failed to send #{length(events)} events, attempt #{attempt} of #{@max_attempts}",
+      reason: inspect(failure(result))
+    )
+
+    backoff = :rand.uniform(@retry_base_milliseconds * 2 ** (attempt - 1) + 1) - 1
+
+    case remaining(deadline) do
+      remaining when remaining <= backoff ->
+        {:kept, failure(result)}
+
+      _ ->
+        Process.sleep(backoff)
+        deliver(config, events, deadline, attempt + 1)
+    end
+  end
+
+  defp failure({:ok, status}), do: {:status, status}
+  defp failure({:error, reason}), do: reason
+
+  # As an atom, :infinity compares greater than any number, e.g. in min/2.
+  defp remaining(:infinity), do: :infinity
+  defp remaining(deadline), do: max(deadline - System.monotonic_time(:millisecond), 0)
 
   defp schedule_flush(%Configuration{events_flush_interval_milliseconds: interval}),
     do: Process.send_after(self(), :flush, interval)

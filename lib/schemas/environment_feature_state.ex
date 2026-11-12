@@ -2,7 +2,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
   use TypedEctoSchema
   import Ecto.Changeset
 
-  alias Flagsmith.Schemas.Environment
+  alias Flagsmith.Schemas.{Environment, Features}
   alias Flagsmith.Schemas.Types
 
   @moduledoc """
@@ -20,6 +20,10 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     embeds_one(:feature, Environment.Feature)
     embeds_one(:feature_segment, __MODULE__.FeatureSegment)
     embeds_many(:multivariate_feature_state_values, Environment.MultivariateFeatureStateValue)
+    embeds_one(:metadata, Features.FeatureState.Metadata)
+
+    # The variant an identity is served, set when evaluating its flags.
+    field(:variant, :string, virtual: true)
   end
 
   @doc false
@@ -33,6 +37,7 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
     |> cast_embed(:feature)
     |> cast_embed(:feature_segment)
     |> cast_embed(:multivariate_feature_state_values)
+    |> cast_embed(:metadata)
   end
 
   @doc false

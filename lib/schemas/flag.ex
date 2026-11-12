@@ -21,6 +21,8 @@ defmodule Flagsmith.Schemas.Flag do
   def from(%Environment.FeatureState{
         enabled: enabled,
         feature_state_value: value,
+        variant: variant,
+        metadata: metadata,
         feature: %Environment.Feature{
           name: name,
           id: id
@@ -30,7 +32,9 @@ defmodule Flagsmith.Schemas.Flag do
       enabled: enabled,
       feature_name: name,
       value: value,
-      feature_id: id
+      feature_id: id,
+      variant: variant,
+      experiment: metadata && metadata.experiment
     }
   end
 

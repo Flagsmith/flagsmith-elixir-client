@@ -2,7 +2,7 @@ defmodule Flagsmith.Client.Events.Test do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
-  import Mox, only: [verify_on_exit!: 1, set_mox_global: 1, expect: 3, expect: 4]
+  import Mox, only: [verify_on_exit!: 1, set_mox_global: 1, expect: 3, expect: 4, stub: 3]
 
   alias Flagsmith.Client
   alias Flagsmith.Client.Events.Processor
@@ -219,6 +219,148 @@ defmodule Flagsmith.Client.Events.Test do
     end
   end
 
+  describe "get_experiment_flag with local evaluation" do
+    setup do
+      Mox.stub_with(Flagsmith.Engine.MockHashing, Flagsmith.Engine.HashingUtils)
+
+      [
+        local_config:
+          Client.new(
+            environment_key: "events_test_key",
+            enable_local_evaluation: true,
+            enable_events: true,
+            events_api_url: @events_url
+          )
+      ]
+    end
+
+    for {case_name, rollout, allocation, variant, value} <- [
+          {"to the variant it was served", 100.0, 100.0, "treatment", "new checkout"},
+          {"to control when served no variant", 100.0, 0.0, "control", "control"}
+        ] do
+      test "an identity in a running experiment is exposed #{case_name}", %{
+        local_config: config,
+        receive_events: receive_events
+      } do
+        # Given
+        expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+          {:ok,
+           %Tesla.Env{
+             status: 200,
+             body: experiment_environment(unquote(rollout), unquote(allocation))
+           }}
+        end)
+
+        expect(Tesla.Adapter.Mock, :call, receive_events)
+
+        # When
+        flag =
+          Client.get_experiment_flag(config, "checkout", "user_123", [
+            %{trait_key: "plan", trait_value: "premium"}
+          ])
+
+        :ok = Client.flush_events(config)
+
+        # Then
+        assert %Schemas.Flag{
+                 value: unquote(value),
+                 variant: unquote(variant),
+                 experiment: %Schemas.Experiment{id: 9, in_experiment: true}
+               } = flag
+
+        assert_receive {:events_request, _tesla_env, %{"events" => [event]}}
+
+        assert %{
+                 "event" => "$flag_exposure",
+                 "feature_name" => "checkout",
+                 "identifier" => "user_123",
+                 "value" => unquote(variant),
+                 "traits" => %{"plan" => "premium"},
+                 "metadata" => %{"experiment_id" => 9}
+               } = event
+      end
+    end
+
+    test "an identity a running experiment does not enroll is not exposed", %{
+      local_config: config
+    } do
+      # Given
+      expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+        {:ok, %Tesla.Env{status: 200, body: experiment_environment(0.0, 100.0)}}
+      end)
+
+      # When
+      flag = Client.get_experiment_flag(config, "checkout", "user_123", [])
+
+      # Then
+      assert %Schemas.Flag{
+               value: "control",
+               experiment: %Schemas.Experiment{in_experiment: false}
+             } = flag
+
+      assert :noop = Client.flush_events(config)
+    end
+  end
+
+  # An environment document with an experiment on feature "checkout", as Flagsmith
+  # sends it: enrolled identities match the experiment's rollout segment, whose
+  # override serves the "treatment" variant to `allocation`% of them.
+  defp experiment_environment(rollout, allocation) do
+    feature_state = fn id, allocation, in_experiment ->
+      %{
+        "feature" => %{"id" => 43, "name" => "checkout", "type" => "MULTIVARIATE"},
+        "enabled" => true,
+        "django_id" => id,
+        "featurestate_uuid" => Ecto.UUID.generate(),
+        "feature_state_value" => "control",
+        "multivariate_feature_state_values" => [
+          %{
+            "multivariate_feature_option" => %{
+              "id" => 9,
+              "key" => "treatment",
+              "value" => "new checkout"
+            },
+            "percentage_allocation" => allocation,
+            "id" => id,
+            "mv_fs_value_uuid" => Ecto.UUID.generate()
+          }
+        ],
+        "metadata" => %{
+          "experiment" => %{
+            "id" => 9,
+            "name" => "checkout experiment",
+            "in_experiment" => in_experiment
+          }
+        }
+      }
+    end
+
+    segment = %{
+      "id" => 19,
+      "name" => "experiment-9-rollout",
+      "rules" => [
+        %{
+          "type" => "ALL",
+          "rules" => [],
+          "conditions" => [
+            %{
+              "operator" => "PERCENTAGE_SPLIT",
+              "value" => to_string(rollout),
+              "property_" => "$.identity.key"
+            }
+          ]
+        }
+      ],
+      "feature_states" => [
+        Map.put(feature_state.(62, allocation, true), "feature_segment", %{"priority" => 0})
+      ]
+    }
+
+    Flagsmith.Engine.Test.Generators.map_env()
+    |> Map.put("feature_states", [feature_state.(61, 0.0, false)])
+    |> put_in(["project", "segments"], [segment])
+  end
+
   describe "track_event" do
     test "a tracked event reaches Flagsmith with its value, traits and metadata", %{
       config: config,
@@ -396,32 +538,157 @@ defmodule Flagsmith.Client.Events.Test do
       assert_receive {:events_request, _, %{"events" => [%{"event" => "second"}]}}, 500
     end
 
-    test "events Flagsmith fails to receive are sent again on the next flush", %{
-      config: config,
-      receive_events: receive_events
-    } do
+    test "a batch is retried until the events API accepts it, giving up on each attempt after 3 seconds",
+         %{config: config, receive_events: receive_events} do
       # Given
-      expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+      test_pid = self()
+
+      expect(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        send(test_pid, {:attempt, tesla_env.opts[:adapter][:timeout]})
+        {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
+      end)
+
+      expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options -> {:error, :econnreset} end)
+      expect(Tesla.Adapter.Mock, :call, receive_events)
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+
+      # When
+      log = capture_log(fn -> assert :ok = Client.flush_events(config) end)
+
+      # Then
+      assert_receive {:attempt, 3000}
+      assert_receive {:events_request, _tesla_env, %{"events" => [%{"event" => "checkout"}]}}
+      assert log =~ "attempt 1 of 3"
+      assert log =~ "attempt 2 of 3"
+      assert :noop = Client.flush_events(config)
+    end
+
+    test "a batch that keeps failing is sent with the next flush, ahead of events tracked since",
+         %{config: config, receive_events: receive_events} do
+      # Given
+      expect(Tesla.Adapter.Mock, :call, 3, fn _tesla_env, _options ->
         {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
       end)
 
       expect(Tesla.Adapter.Mock, :call, receive_events)
-      :ok = Client.track_event(config, "checkout_completed", identifier: "user_123")
+      :ok = Client.track_event(config, "add_to_cart", identifier: "user_123")
 
-      # When
       log =
         capture_log(fn ->
-          assert {:error, "unavailable"} = Processor.flush(config.environment_key)
+          assert {:error, {:status, 503}} = Client.flush_events(config)
         end)
 
-      :ok = Client.track_event(config, "signed_out", identifier: "user_123")
-      :ok = Processor.flush(config.environment_key)
+      # When
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+      :ok = Client.flush_events(config)
 
       # Then
-      assert log =~ "Failed to send events to Flagsmith, keeping them to retry"
-
+      assert log =~ "keeping them for the next flush"
       assert_receive {:events_request, _tesla_env, %{"events" => events}}
-      assert ["checkout_completed", "signed_out"] = Enum.map(events, & &1["event"])
+      assert ["add_to_cart", "checkout"] = Enum.map(events, & &1["event"])
+    end
+
+    for {case_name, failures} <- [
+          {"a batch the events API rejects is dropped", [400]},
+          {"a batch whose last attempt gets a server error is dropped", [503, 503, 500]}
+        ] do
+      test case_name, %{config: config, receive_events: receive_events} do
+        # Given
+        for status <- unquote(failures) do
+          expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+            {:ok, %Tesla.Env{status: status, body: "failed"}}
+          end)
+        end
+
+        expect(Tesla.Adapter.Mock, :call, receive_events)
+        :ok = Client.track_event(config, "add_to_cart", identifier: "user_123")
+
+        log =
+          capture_log(fn ->
+            assert {:error, {:status, _}} = Client.flush_events(config)
+          end)
+
+        # When
+        :ok = Client.track_event(config, "checkout", identifier: "user_123")
+        :ok = Client.flush_events(config)
+
+        # Then
+        assert log =~ "dropping them"
+        assert_receive {:events_request, _tesla_env, %{"events" => [%{"event" => "checkout"}]}}
+      end
+    end
+
+    test "a batch whose last attempt fails otherwise is kept, after server errors", %{
+      config: config,
+      receive_events: receive_events
+    } do
+      # Given
+      for status <- [500, 500, 503] do
+        expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+          {:ok, %Tesla.Env{status: status, body: "failed"}}
+        end)
+      end
+
+      expect(Tesla.Adapter.Mock, :call, receive_events)
+      :ok = Client.track_event(config, "add_to_cart", identifier: "user_123")
+      capture_log(fn -> assert {:error, {:status, 503}} = Client.flush_events(config) end)
+
+      # When
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+      :ok = Client.flush_events(config)
+
+      # Then
+      assert_receive {:events_request, _tesla_env, %{"events" => events}}
+      assert ["add_to_cart", "checkout"] = Enum.map(events, & &1["event"])
+    end
+
+    for status <- [401, 403] do
+      test "an events API refusing the environment key with #{status} stops event tracking", %{
+        config: config
+      } do
+        # Given
+        expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+          {:ok, %Tesla.Env{status: unquote(status), body: "refused"}}
+        end)
+
+        :ok = Client.track_event(config, "add_to_cart", identifier: "user_123")
+
+        log =
+          capture_log(fn ->
+            assert {:error, {:status, unquote(status)}} = Client.flush_events(config)
+          end)
+
+        # When
+        :ok = Client.track_event(config, "checkout", identifier: "user_123")
+
+        # Then
+        assert log =~ "stopping event tracking"
+        assert :noop = Client.flush_events(config)
+      end
+    end
+
+    test "a full buffer drops its oldest event", %{config: config, receive_events: receive_events} do
+      # Given
+      expect(Tesla.Adapter.Mock, :call, 3, fn _tesla_env, _options ->
+        {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
+      end)
+
+      expect(Tesla.Adapter.Mock, :call, receive_events)
+
+      log =
+        capture_log(fn ->
+          for n <- 1..1000, do: :ok = Client.track_event(config, "event_#{n}")
+          assert :noop = Client.flush_events(config)
+
+          # When
+          :ok = Client.track_event(config, "event_1001")
+          :ok = Client.flush_events(config)
+        end)
+
+      # Then
+      assert log =~ "dropping the oldest event_1 event"
+      assert_receive {:events_request, _tesla_env, %{"events" => events}}
+      assert Enum.map(events, & &1["event"]) == for(n <- 2..1001, do: "event_#{n}")
     end
 
     test "a full buffer of events is sent without waiting for the flush interval", %{
@@ -454,6 +721,56 @@ defmodule Flagsmith.Client.Events.Test do
       # Then
       assert_receive {:events_request, _tesla_env, %{"events" => [event]}}
       assert %{"event" => "checkout_completed"} = event
+    end
+
+    test "closing the client sends the buffered events, and stops sending events", %{
+      config: config,
+      receive_events: receive_events
+    } do
+      # Given
+      expect(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+        {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
+      end)
+
+      expect(Tesla.Adapter.Mock, :call, receive_events)
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+
+      # When
+      capture_log(fn -> assert :ok = Client.close(config) end)
+
+      # Then
+      assert_receive {:events_request, _tesla_env, %{"events" => [%{"event" => "checkout"}]}}
+      assert :undefined = Processor.whereis(config.environment_key)
+    end
+
+    test "closing the client returns within its timeout when the events API does not answer", %{
+      config: config
+    } do
+      # Given
+      test_pid = self()
+
+      stub(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        timeout = tesla_env.opts[:adapter][:timeout]
+        send(test_pid, {:attempt, timeout})
+        Process.sleep(timeout)
+        {:error, :timeout}
+      end)
+
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+
+      # When
+      {elapsed, result} =
+        :timer.tc(fn -> capture_log(fn -> send(test_pid, Client.close(config, 200)) end) end)
+
+      # Then
+      assert_received {:error, :timeout}
+      assert_receive {:attempt, timeout} when timeout <= 200
+      assert elapsed < 400_000
+      assert is_binary(result)
+    end
+
+    test "flushing events requires events to be enabled" do
+      assert {:error, :events_disabled} = Client.flush_events(environment_key: "A")
     end
 
     test "nothing is sent when there are no events", %{config: config} do

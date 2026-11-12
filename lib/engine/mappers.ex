@@ -128,6 +128,7 @@ defmodule Flagsmith.Engine.Mappers do
   defp map_variant(%Environment.MultivariateFeatureStateValue{} = value) do
     %{
       "value" => value.multivariate_feature_option.value,
+      "key" => value.multivariate_feature_option.key,
       "weight" => value.percentage_allocation,
       "priority" => value.id || value.mv_fs_value_uuid
     }

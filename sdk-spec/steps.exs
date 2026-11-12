@@ -46,6 +46,23 @@ defmodule SDKSpec.Steps do
     end
   end
 
+  # Create the SDK client with local evaluation and events enabled
+  def create_client_with_local_evaluation_and_events(environment_key, api_url, events_api_url) do
+    client =
+      Client.new(
+        environment_key: environment_key,
+        api_url: api_url,
+        enable_local_evaluation: true,
+        enable_events: true,
+        events_api_url: events_api_url
+      )
+
+    with :ok <- start_supervisor(),
+         {:ok, _environment} <- Client.get_environment(client) do
+      {:ok, client}
+    end
+  end
+
   defp start_supervisor do
     case Flagsmith.Supervisor.start_link() do
       {:ok, _pid} -> :ok
@@ -89,5 +106,24 @@ defmodule SDKSpec.Steps do
       value: value,
       metadata: metadata
     )
+  end
+
+  # When the application tracks events "event_{first}" to "event_{last}" for identity "{identifier}"
+  def track_numbered_events(client, first, last, identifier) do
+    Enum.each(first..last, fn number ->
+      :ok = Client.track_event(client, "event_#{number}", identifier: identifier)
+    end)
+  end
+
+  # When the application flushes events
+  def flush_events(client) do
+    Client.flush_events(client)
+    :ok
+  end
+
+  # When the application closes the client with a timeout of {timeout} seconds
+  def close_client(client, timeout) do
+    Client.close(client, round(timeout * 1000))
+    :ok
   end
 end

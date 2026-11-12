@@ -9,6 +9,7 @@ defmodule Flagsmith.Schemas.Environment.MultivariateFeatureOption do
   @primary_key {:id, :id, autogenerate: false}
   typed_embedded_schema do
     field(:value, :string)
+    field(:key, :string)
   end
 
   @doc false
@@ -16,7 +17,7 @@ defmodule Flagsmith.Schemas.Environment.MultivariateFeatureOption do
   @spec changeset(__MODULE__.t(), map()) :: Ecto.Changeset.t()
   def changeset(struct \\ %__MODULE__{}, params) do
     struct
-    |> cast(params, [:id, :value], empty_values: [])
+    |> cast(params, [:id, :value, :key], empty_values: [])
   end
 
   @doc false
