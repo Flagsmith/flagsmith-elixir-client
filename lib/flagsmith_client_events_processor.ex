@@ -87,7 +87,8 @@ defmodule Flagsmith.Client.Events.Processor do
 
   @doc """
   Sends the buffered events, and stops the processor, waiting for at most `timeout`
-  milliseconds. Events not sent by then are dropped.
+  milliseconds. Events not sent by then are dropped: a processor still sending when
+  the timeout expires, e.g. retrying a flush already running, is killed.
   """
   @spec close(environment_key(), non_neg_integer()) :: :ok | :noop | {:error, term()}
   def close(environment_key, timeout \\ @default_close_timeout_milliseconds) do
@@ -98,9 +99,10 @@ defmodule Flagsmith.Client.Events.Processor do
         try do
           GenServer.call(pid, {:close, deadline}, timeout)
         catch
-          # The processor is still sending a batch: it stops once done, past the deadline.
+          # The processor is still sending a batch, which may take several more attempts.
           :exit, {:timeout, _} ->
             Logger.warning("Gave up sending events after #{timeout} milliseconds while closing")
+            kill(pid)
             {:error, :timeout}
 
           :exit, {reason, _} when reason in [:noproc, :normal, :shutdown] ->
@@ -109,6 +111,17 @@ defmodule Flagsmith.Client.Events.Processor do
 
       :undefined ->
         :noop
+    end
+  end
+
+  # Kills the processor, returning once it's gone. It traps exits, so only :kill stops
+  # it while it's busy sending; its supervisor doesn't restart it, being :temporary.
+  defp kill(pid) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
     end
   end
 

@@ -769,6 +769,33 @@ defmodule Flagsmith.Client.Events.Test do
       assert is_binary(result)
     end
 
+    test "closing the client stops a flush still sending when its timeout expires", %{
+      config: config
+    } do
+      # Given a flush already sending, which the events API keeps failing slowly
+      test_pid = self()
+
+      stub(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+        send(test_pid, :attempt)
+        Process.sleep(100)
+        {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
+      end)
+
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+      pid = Processor.whereis(config.environment_key)
+      spawn(fn -> catch_exit(Processor.flush(config.environment_key)) end)
+      assert_receive :attempt
+
+      # When
+      log = capture_log(fn -> assert {:error, :timeout} = Client.close(config, 50) end)
+
+      # Then
+      assert log =~ "Gave up sending events after 50 milliseconds while closing"
+      refute Process.alive?(pid)
+      assert :undefined = Processor.whereis(config.environment_key)
+      refute_receive :attempt, 500
+    end
+
     test "flushing events requires events to be enabled" do
       assert {:error, :events_disabled} = Client.flush_events(environment_key: "A")
     end

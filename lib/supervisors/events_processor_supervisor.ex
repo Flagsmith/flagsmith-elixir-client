@@ -25,7 +25,9 @@ defmodule Flagsmith.Client.Events.Processor.Supervisor do
         id: Flagsmith.Client.Events.Processor,
         start: {Flagsmith.Client.Events.Processor, :start_link, [config]},
         shutdown: 25_000,
-        restart: :transient,
+        # Not restarted once stopped, by closing the client or killing it when closing
+        # times out: `Flagsmith.Client.Events.Processor.track/2` starts a new one if needed.
+        restart: :temporary,
         type: :worker
       }
     )
