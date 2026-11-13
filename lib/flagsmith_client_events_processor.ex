@@ -23,6 +23,7 @@ defmodule Flagsmith.Client.Events.Processor do
   @request_timeout_milliseconds 3000
   @retry_base_milliseconds if(Mix.env() == :test, do: 20, else: 1000)
   @default_close_timeout_milliseconds 5000
+  @close_margin_milliseconds 500
   # Statuses that a later attempt may not get, besides server errors.
   @retried_statuses [408, 429]
   # Statuses meaning the events API refuses the environment key.
@@ -36,7 +37,14 @@ defmodule Flagsmith.Client.Events.Processor do
     # Whether events were tracked since the last attempt to send the buffer.
     unsent: false,
     refused: false,
-    exposure_keys: MapSet.new()
+    exposure_keys: MapSet.new(),
+    # The batch being sent, by a task, so that the processor keeps buffering events
+    # (and applying the buffer's limit) while it waits on the events API.
+    sending: nil,
+    # Callers of flush/1 waiting for the batch being sent.
+    flush_waiters: [],
+    # The caller of close/2, once closing.
+    closing: nil
   ]
 
   #################################
@@ -76,30 +84,40 @@ defmodule Flagsmith.Client.Events.Processor do
   returns once each of them has been delivered, dropped, or kept for the next flush.
   Returns `:noop` when there is nothing to send, including when the buffer only holds
   events already kept from a failed flush, which the next timed flush sends.
+  Never exits: returns `{:error, :closed}` if the processor is closed meanwhile.
   """
   @spec flush(environment_key()) :: :ok | :noop | {:error, term()}
   def flush(environment_key) do
     case whereis(environment_key) do
-      pid when is_pid(pid) -> GenServer.call(pid, :flush, :infinity)
-      :undefined -> :noop
+      pid when is_pid(pid) ->
+        try do
+          GenServer.call(pid, :flush, :infinity)
+        catch
+          # The processor stopped between being looked up and called.
+          :exit, {reason, _} when reason in [:noproc, :normal, :shutdown] -> :noop
+          :exit, {reason, _} -> {:error, reason}
+        end
+
+      :undefined ->
+        :noop
     end
   end
 
   @doc """
-  Sends the buffered events, and stops the processor, waiting for at most `timeout`
-  milliseconds. Events not sent by then are dropped: a processor still sending when
-  the timeout expires, e.g. retrying a flush already running, is killed.
+  Sends the buffered events, and stops the processor, returning after at most
+  `timeout` milliseconds. Events not sent by then are dropped, and a batch still being
+  sent, e.g. retried by a flush already running, is abandoned: no attempt to send it
+  is made after this returns.
   """
   @spec close(environment_key(), non_neg_integer()) :: :ok | :noop | {:error, term()}
   def close(environment_key, timeout \\ @default_close_timeout_milliseconds) do
     case whereis(environment_key) do
       pid when is_pid(pid) ->
-        deadline = System.monotonic_time(:millisecond) + timeout
-
         try do
-          GenServer.call(pid, {:close, deadline}, timeout)
+          # The processor replies by the deadline itself; the margin only covers one
+          # that can't, for which it's killed.
+          GenServer.call(pid, {:close, timeout}, timeout + @close_margin_milliseconds)
         catch
-          # The processor is still sending a batch, which may take several more attempts.
           :exit, {:timeout, _} ->
             Logger.warning("Gave up sending events after #{timeout} milliseconds while closing")
             kill(pid)
@@ -115,7 +133,7 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   # Kills the processor, returning once it's gone. It traps exits, so only :kill stops
-  # it while it's busy sending; its supervisor doesn't restart it, being :temporary.
+  # it; its supervisor doesn't restart it, being :temporary.
   defp kill(pid) do
     ref = Process.monitor(pid)
     Process.exit(pid, :kill)
@@ -197,31 +215,71 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   @impl GenServer
+  def handle_call(:flush, from, %__MODULE__{sending: %{}} = data),
+    do: {:noreply, add_flush_waiter(data, from)}
+
   def handle_call(:flush, _from, %__MODULE__{unsent: false} = data),
     do: {:reply, :noop, data}
 
-  def handle_call(:flush, _from, %__MODULE__{} = data) do
-    {result, data} = do_flush(data, :infinity)
-    {:reply, result, data}
-  end
+  def handle_call(:flush, from, %__MODULE__{} = data),
+    do: {:noreply, data |> send_batch(:infinity) |> add_flush_waiter(from)}
 
-  def handle_call({:close, deadline}, _from, %__MODULE__{} = data) do
-    {result, _data} = do_flush(data, deadline)
-    {:stop, :normal, result, %{data | buffer: :queue.new(), buffered: 0}}
+  # Already closing: the first caller is the one waiting for the buffered events.
+  def handle_call({:close, _timeout}, _from, %__MODULE__{closing: %{}} = data),
+    do: {:reply, :noop, data}
+
+  def handle_call({:close, timeout}, from, %__MODULE__{} = data) do
+    Process.send_after(self(), :close_timeout, timeout)
+    deadline = System.monotonic_time(:millisecond) + timeout
+    closing = %{from: from, timeout: timeout, deadline: deadline, final_batch: false}
+
+    case data.sending do
+      # Waits for the batch being sent, until the deadline, then sends what's left.
+      %{} -> {:noreply, %{data | closing: closing}}
+      nil -> close_next(%{data | closing: closing}, :noop)
+    end
   end
 
   @impl GenServer
   def handle_info(:flush, %__MODULE__{configuration: config} = data) do
-    {_, data} = do_flush(data, :infinity)
     schedule_flush(config)
-    {:noreply, data}
+
+    case data do
+      %{sending: nil, closing: nil} -> {:noreply, send_batch(data, :infinity)}
+      _ -> {:noreply, data}
+    end
+  end
+
+  def handle_info({ref, outcome}, %__MODULE__{sending: %{task: %Task{ref: ref}}} = data) do
+    Process.demonitor(ref, [:flush])
+    sent(data, outcome)
+  end
+
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %__MODULE__{sending: %{task: %Task{ref: ref}}} = data
+      ),
+      do: sent(data, {:kept, reason})
+
+  def handle_info(:close_timeout, %__MODULE__{closing: %{timeout: timeout}} = data) do
+    Logger.warning("Gave up sending events after #{timeout} milliseconds while closing")
+    stop_closing(abandon_batch(data), {:error, :timeout})
   end
 
   def handle_info(_, data), do: {:noreply, data}
 
   @impl GenServer
   def terminate(_reason, %__MODULE__{} = data) do
-    do_flush(data, System.monotonic_time(:millisecond) + @default_close_timeout_milliseconds)
+    data = abandon_batch(data)
+
+    case take_batch(data) do
+      nil ->
+        :noop
+
+      {events, data} ->
+        deadline = System.monotonic_time(:millisecond) + @default_close_timeout_milliseconds
+        apply_outcome(data, events, deliver(data.configuration, events, deadline, 1))
+    end
   end
 
   defp exposure_key(%{event: @flag_exposure_event} = event),
@@ -230,7 +288,7 @@ defmodule Flagsmith.Client.Events.Processor do
   defp exposure_key(_), do: nil
 
   # A full buffer drops its oldest event for the new one. Filling it up sends it
-  # without waiting for the flush interval.
+  # without waiting for the flush interval, or as soon as the batch being sent is done.
   defp buffer(%__MODULE__{buffered: @max_buffered_events} = data, event) do
     {{:value, dropped}, buffer} = :queue.out(data.buffer)
     Logger.warning("Event buffer is full, dropping the oldest #{dropped.event} event")
@@ -245,28 +303,102 @@ defmodule Flagsmith.Client.Events.Processor do
         unsent: true
     }
 
-    case data.buffered do
-      @max_buffered_events -> elem(do_flush(data, :infinity), 1)
+    case {data.buffered, data.sending, data.closing} do
+      {@max_buffered_events, nil, nil} -> send_batch(data, :infinity)
       _ -> data
     end
   end
 
-  defp do_flush(%__MODULE__{buffered: 0} = data, _deadline), do: {:noop, data}
+  defp add_flush_waiter(data, from), do: %{data | flush_waiters: [from | data.flush_waiters]}
 
-  defp do_flush(%__MODULE__{configuration: config} = data, deadline) do
-    events = :queue.to_list(data.buffer)
-    sent = %{data | buffer: :queue.new(), buffered: 0, unsent: false, exposure_keys: MapSet.new()}
+  # Starts sending the buffered events, in a task, unless there are none.
+  defp send_batch(%__MODULE__{configuration: config} = data, deadline) do
+    case take_batch(data) do
+      nil ->
+        data
 
-    case deliver(config, events, deadline, 1) do
+      {events, data} ->
+        task = Task.async(fn -> deliver(config, events, deadline, 1) end)
+        %{data | sending: %{task: task, events: events}}
+    end
+  end
+
+  defp take_batch(%__MODULE__{buffered: 0}), do: nil
+
+  defp take_batch(%__MODULE__{} = data),
+    do: {:queue.to_list(data.buffer), %{data | buffer: :queue.new(), buffered: 0, unsent: false}}
+
+  # Kills the task sending a batch, if any, putting the batch back in the buffer.
+  defp abandon_batch(%__MODULE__{sending: nil} = data), do: data
+
+  defp abandon_batch(%__MODULE__{sending: %{task: task, events: events}} = data) do
+    Task.shutdown(task, :brutal_kill)
+    keep(%{data | sending: nil}, events)
+  end
+
+  # The batch being sent is done with: replies to whoever waits for it, or sends what
+  # was tracked meanwhile to the callers of flush/1 waiting for it.
+  defp sent(%__MODULE__{sending: %{events: events}} = data, outcome) do
+    {result, data} = apply_outcome(%{data | sending: nil}, events, outcome)
+
+    cond do
+      data.closing != nil ->
+        close_next(data, result)
+
+      data.flush_waiters != [] and data.unsent ->
+        {:noreply, send_batch(data, :infinity)}
+
+      true ->
+        Enum.each(data.flush_waiters, &GenServer.reply(&1, result))
+        data = %{data | flush_waiters: []}
+
+        # Events tracked meanwhile filled the buffer up; a kept batch alone doesn't.
+        case {data.buffered, data.unsent} do
+          {@max_buffered_events, true} -> {:noreply, send_batch(data, :infinity)}
+          _ -> {:noreply, data}
+        end
+    end
+  end
+
+  # Sends the buffer once while closing, by the deadline, then stops.
+  defp close_next(%__MODULE__{closing: %{final_batch: false} = closing} = data, result) do
+    case send_batch(data, closing.deadline) do
+      %{sending: nil} = data -> stop_closing(data, result)
+      data -> {:noreply, %{data | closing: %{closing | final_batch: true}}}
+    end
+  end
+
+  defp close_next(%__MODULE__{} = data, result), do: stop_closing(data, result)
+
+  defp stop_closing(%__MODULE__{closing: closing} = data, result) do
+    GenServer.reply(closing.from, result)
+    Enum.each(data.flush_waiters, &GenServer.reply(&1, {:error, :closed}))
+
+    {:stop, :normal, %{data | buffer: :queue.new(), buffered: 0, flush_waiters: [], closing: nil}}
+  end
+
+  # What became of a batch: forgets it once delivered or dropped, and puts it back in
+  # the buffer, ahead of the events tracked since, when kept for the next flush.
+  defp apply_outcome(data, events, outcome) do
+    case outcome do
       :delivered ->
-        {:ok, sent}
+        {:ok, forget_exposures(data, events)}
 
       {:dropped, reason} ->
-        {{:error, reason}, sent}
+        {{:error, reason}, forget_exposures(data, events)}
 
       {:refused, reason} ->
         Logger.error("The events API refused the environment key, stopping event tracking")
-        {{:error, reason}, %{sent | refused: true}}
+
+        {{:error, reason},
+         %{
+           data
+           | buffer: :queue.new(),
+             buffered: 0,
+             unsent: false,
+             refused: true,
+             exposure_keys: MapSet.new()
+         }}
 
       {:kept, reason} ->
         Logger.warning("Failed to send events to Flagsmith, keeping them for the next flush",
@@ -274,8 +406,24 @@ defmodule Flagsmith.Client.Events.Processor do
           events: length(events)
         )
 
-        {{:error, reason}, %{data | unsent: false}}
+        {{:error, reason}, keep(data, events)}
     end
+  end
+
+  defp keep(data, events) do
+    kept = events ++ :queue.to_list(data.buffer)
+    dropped = length(kept) - @max_buffered_events
+    kept = if dropped > 0, do: Enum.drop(kept, dropped), else: kept
+
+    if dropped > 0,
+      do: Logger.warning("Event buffer is full, dropping the oldest #{dropped} events")
+
+    %{data | buffer: :queue.from_list(kept), buffered: length(kept)}
+  end
+
+  defp forget_exposures(data, events) do
+    keys = events |> Enum.map(&exposure_key/1) |> Enum.reject(&is_nil/1) |> MapSet.new()
+    %{data | exposure_keys: MapSet.difference(data.exposure_keys, keys)}
   end
 
   # Sends a batch up to @max_attempts times, backing off with full jitter between

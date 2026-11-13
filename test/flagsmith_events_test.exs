@@ -678,7 +678,8 @@ defmodule Flagsmith.Client.Events.Test do
       log =
         capture_log(fn ->
           for n <- 1..1000, do: :ok = Client.track_event(config, "event_#{n}")
-          assert :noop = Client.flush_events(config)
+          # Waits for, or finds done, the batch the full buffer sent by itself.
+          assert Client.flush_events(config) in [:noop, {:error, {:status, 503}}]
 
           # When
           :ok = Client.track_event(config, "event_1001")
@@ -704,7 +705,45 @@ defmodule Flagsmith.Client.Events.Test do
       # Then
       assert_receive {:events_request, _tesla_env, %{"events" => events}}, 1000
       assert length(events) == 1000
-      assert :noop = Processor.flush(config.environment_key)
+      assert Processor.flush(config.environment_key) in [:ok, :noop]
+    end
+
+    test "events tracked while a batch is being sent are buffered, up to the buffer's limit", %{
+      config: config
+    } do
+      # Given a full buffer, whose batch the events API holds on to
+      test_pid = self()
+
+      stub(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        send(test_pid, {:holding, self(), Jason.decode!(tesla_env.body)})
+
+        receive do
+          :release -> {:ok, %Tesla.Env{status: 202, body: ""}}
+        end
+      end)
+
+      for n <- 1..1000, do: :ok = Client.track_event(config, "event_#{n}")
+      assert_receive {:holding, request, %{"events" => first_batch}}, 1000
+
+      # When
+      log =
+        capture_log(fn ->
+          for n <- 1001..2500, do: :ok = Client.track_event(config, "event_#{n}")
+
+          # Then the processor keeps up, holding at most a full buffer besides the batch
+          pid = Processor.whereis(config.environment_key)
+          assert %Processor{buffered: 1000, sending: %{}} = :sys.get_state(pid)
+          assert {:message_queue_len, 0} = Process.info(pid, :message_queue_len)
+        end)
+
+      assert log =~ "dropping the oldest event_1001 event"
+      assert Enum.map(first_batch, & &1["event"]) == for(n <- 1..1000, do: "event_#{n}")
+
+      # And the full buffer is sent once the batch is done with
+      send(request, :release)
+      assert_receive {:holding, request, %{"events" => second_batch}}, 1000
+      send(request, :release)
+      assert Enum.map(second_batch, & &1["event"]) == for(n <- 1501..2500, do: "event_#{n}")
     end
 
     test "buffered events are sent when the application stops", %{
@@ -783,17 +822,50 @@ defmodule Flagsmith.Client.Events.Test do
 
       :ok = Client.track_event(config, "checkout", identifier: "user_123")
       pid = Processor.whereis(config.environment_key)
-      spawn(fn -> catch_exit(Processor.flush(config.environment_key)) end)
+      monitor = Process.monitor(pid)
+      spawn(fn -> send(test_pid, {:flushed, Processor.flush(config.environment_key)}) end)
       assert_receive :attempt
 
       # When
       log = capture_log(fn -> assert {:error, :timeout} = Client.close(config, 50) end)
 
-      # Then
+      # Then the flush caller is told, rather than exiting, and nothing more is sent
       assert log =~ "Gave up sending events after 50 milliseconds while closing"
-      refute Process.alive?(pid)
-      assert :undefined = Processor.whereis(config.environment_key)
+      assert_receive {:flushed, {:error, :closed}}
+      assert_receive {:DOWN, ^monitor, :process, ^pid, :normal}
       refute_receive :attempt, 500
+    end
+
+    test "closing the client while it's already closing is a no-op", %{config: config} do
+      # Given a close waiting on the events API
+      test_pid = self()
+
+      stub(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+        send(test_pid, {:holding, self()})
+
+        receive do
+          :release -> {:ok, %Tesla.Env{status: 202, body: ""}}
+        end
+      end)
+
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+      spawn(fn -> send(test_pid, {:closed, Client.close(config)}) end)
+      assert_receive {:holding, request}
+
+      # When / Then
+      assert :noop = Client.close(config)
+      send(request, :release)
+      assert_receive {:closed, :ok}
+    end
+
+    test "flushing events after the processor has stopped is a no-op", %{config: config} do
+      # Given
+      expect(Tesla.Adapter.Mock, :call, fn _, _ -> {:ok, %Tesla.Env{status: 202}} end)
+      :ok = Client.track_event(config, "checkout", identifier: "user_123")
+      :ok = Client.close(config)
+
+      # When / Then
+      assert :noop = Client.flush_events(config)
     end
 
     test "flushing events requires events to be enabled" do
