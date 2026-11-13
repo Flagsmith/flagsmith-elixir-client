@@ -73,6 +73,17 @@ defmodule Flagsmith.Client.Poller do
     end
   end
 
+  # Stops the poller for the environment key, if one is running.
+  @spec stop(environment_key()) :: :ok | :noop
+  def stop(environment_key) do
+    with pid when is_pid(pid) <- whereis(environment_key),
+         :ok <- DynamicSupervisor.terminate_child(__MODULE__.Supervisor, pid) do
+      :ok
+    else
+      _ -> :noop
+    end
+  end
+
   @spec start_link(Configuration.t()) :: {:ok, pid()}
   def start_link(%Configuration{environment_key: environment_key} = config) do
     name = via_tuple(environment_key)

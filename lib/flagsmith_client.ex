@@ -329,6 +329,50 @@ defmodule Flagsmith.Client do
     do: track_exposure_event(new(opts), feature_name, event_opts)
 
   @doc """
+  Sends the events tracked so far to Flagsmith without waiting for the flush interval,
+  and returns once each of them has been delivered, dropped, or kept for the next flush.
+
+  Sending a batch of events is attempted up to 3 times, giving up on an attempt after
+  3 seconds and backing off from 1 second, doubling, with full jitter. A batch the
+  events API rejects is dropped, and one it keeps failing is kept for the next flush,
+  ahead of the events tracked since. An events API refusing the environment key stops
+  event tracking. Up to 1000 events are buffered: when full, the oldest one is dropped.
+  """
+  @spec flush_events(Configuration.t() | Keyword.t()) :: :ok | :noop | {:error, term()}
+  def flush_events(%Configuration{enable_events: false}), do: {:error, :events_disabled}
+
+  def flush_events(%Configuration{environment_key: environment_key}),
+    do: Events.Processor.flush(environment_key)
+
+  def flush_events(opts) when is_list(opts), do: flush_events(new(opts))
+
+  @doc """
+  Closes the client: sends its buffered events, waiting for at most `timeout`
+  milliseconds (5 seconds by default), and stops the processes running for its
+  environment key, polling the environment and sending events. Events not sent by
+  then are dropped.
+
+  Using the client again starts them again.
+  """
+  @spec close(Configuration.t() | Keyword.t(), timeout :: non_neg_integer()) ::
+          :ok | :noop | {:error, term()}
+  def close(configuration_or_opts, timeout \\ 5000)
+
+  def close(
+        %Configuration{
+          environment_key: environment_key,
+          enable_local_evaluation: local?,
+          enable_events: events?
+        },
+        timeout
+      ) do
+    if local?, do: Flagsmith.Client.Poller.stop(environment_key)
+    if events?, do: Events.Processor.close(environment_key, timeout), else: :noop
+  end
+
+  def close(opts, timeout) when is_list(opts), do: close(new(opts), timeout)
+
+  @doc """
   Return all flags from an environment as a list.
   If a `t:Flagsmith.Schemas.Environment.t/0` is passed instead of a 
   `t:Flagsmith.Configuration.t/0` or list of options, then the flags are extracted
@@ -482,21 +526,37 @@ defmodule Flagsmith.Client do
       do: analytics_track(new(opts), tracking)
 
   @doc false
-  # Submits a batch of events to the Flagsmith events API.
-  @spec events_track(Configuration.t(), list(Events.Processor.event())) ::
-          {:ok, term()} | {:error, term()}
-  def events_track(%Configuration{events_api_url: events_api_url} = config, events) do
-    case Tesla.post(
-           http_client(%{config | api_url: events_api_url}),
-           @api_paths.events,
-           %{events: events}
+  # Submits a batch of events to the Flagsmith events API, once, giving up on it after
+  # `timeout` milliseconds. Returns the response's status, or the reason no response was
+  # received; retrying is up to the caller.
+  @spec events_track(Configuration.t(), list(Events.Processor.event()), pos_integer()) ::
+          {:ok, Tesla.Env.status()} | {:error, term()}
+  def events_track(%Configuration{} = config, events, timeout) do
+    case Tesla.post(events_http_client(config, timeout), @api_paths.events, %{events: events},
+           opts: [adapter: [timeout: timeout]]
          ) do
-      {:ok, %{status: status, body: body}} when status >= 200 and status < 300 ->
-        {:ok, body}
-
-      error_resp ->
-        return_error(error_resp)
+      {:ok, %Tesla.Env{status: status}} -> {:ok, status}
+      {:error, _} = error -> error
     end
+  end
+
+  @spec events_http_client(Configuration.t(), pos_integer()) :: Tesla.Client.t()
+  defp events_http_client(
+         %Configuration{
+           environment_key: environment_key,
+           events_api_url: events_api_url,
+           custom_headers: custom_headers
+         },
+         timeout
+       ) do
+    Tesla.client([
+      base_url_middleware(events_api_url),
+      auth_middleware(environment_key),
+      user_agent_middleware(),
+      Tesla.Middleware.JSON,
+      {Tesla.Middleware.Headers, custom_headers},
+      {Tesla.Middleware.Timeout, timeout: timeout}
+    ])
   end
 
   @doc false

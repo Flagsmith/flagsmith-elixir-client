@@ -154,12 +154,23 @@ defmodule Flagsmith.Engine do
   defp to_feature_states(feature_states, flags) do
     Enum.map(feature_states, fn %{feature: %{name: name}} ->
       case Map.fetch!(flags, name) do
-        %FlagResult{enabled: enabled, value: value, metadata: %{feature_state: feature_state}}
-        when enabled === feature_state.enabled and value === feature_state.feature_state_value ->
+        %FlagResult{
+          enabled: enabled,
+          value: value,
+          variant: variant,
+          metadata: %{feature_state: feature_state}
+        }
+        when enabled === feature_state.enabled and value === feature_state.feature_state_value and
+               variant === feature_state.variant ->
           feature_state
 
-        %FlagResult{enabled: enabled, value: value, metadata: %{feature_state: feature_state}} ->
-          %{feature_state | enabled: enabled, feature_state_value: value}
+        %FlagResult{
+          enabled: enabled,
+          value: value,
+          variant: variant,
+          metadata: %{feature_state: feature_state}
+        } ->
+          %{feature_state | enabled: enabled, feature_state_value: value, variant: variant}
       end
     end)
   end
