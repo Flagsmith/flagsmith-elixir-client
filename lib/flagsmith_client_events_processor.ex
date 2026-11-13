@@ -43,6 +43,9 @@ defmodule Flagsmith.Client.Events.Processor do
     sending: nil,
     # Callers of flush/1 waiting for the batch being sent.
     flush_waiters: [],
+    # Callers of flush/1 who arrived while a batch was being sent, with events tracked
+    # since: they wait for one more batch, then get a reply whatever is tracked meanwhile.
+    next_flush_waiters: [],
     # The caller of close/2, once closing.
     closing: nil
   ]
@@ -215,6 +218,9 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   @impl GenServer
+  def handle_call(:flush, from, %__MODULE__{sending: %{}, unsent: true} = data),
+    do: {:noreply, %{data | next_flush_waiters: [from | data.next_flush_waiters]}}
+
   def handle_call(:flush, from, %__MODULE__{sending: %{}} = data),
     do: {:noreply, add_flush_waiter(data, from)}
 
@@ -292,7 +298,7 @@ defmodule Flagsmith.Client.Events.Processor do
   defp buffer(%__MODULE__{buffered: @max_buffered_events} = data, event) do
     {{:value, dropped}, buffer} = :queue.out(data.buffer)
     Logger.warning("Event buffer is full, dropping the oldest #{dropped.event} event")
-    %{data | buffer: :queue.in(event, buffer), unsent: true}
+    forget_exposures(%{data | buffer: :queue.in(event, buffer), unsent: true}, [dropped])
   end
 
   defp buffer(%__MODULE__{} = data, event) do
@@ -336,21 +342,24 @@ defmodule Flagsmith.Client.Events.Processor do
     keep(%{data | sending: nil}, events)
   end
 
-  # The batch being sent is done with: replies to whoever waits for it, or sends what
-  # was tracked meanwhile to the callers of flush/1 waiting for it.
+  # The batch being sent is done with: replies to the callers of flush/1 waiting for it,
+  # and sends one more batch for those who arrived meanwhile, with events tracked since.
   defp sent(%__MODULE__{sending: %{events: events}} = data, outcome) do
     {result, data} = apply_outcome(%{data | sending: nil}, events, outcome)
+    reply_all(data.flush_waiters, result)
+    data = %{data | flush_waiters: []}
 
     cond do
       data.closing != nil ->
         close_next(data, result)
 
-      data.flush_waiters != [] and data.unsent ->
-        {:noreply, send_batch(data, :infinity)}
+      data.next_flush_waiters != [] and data.unsent ->
+        data = send_batch(data, :infinity)
+        {:noreply, %{data | flush_waiters: data.next_flush_waiters, next_flush_waiters: []}}
 
       true ->
-        Enum.each(data.flush_waiters, &GenServer.reply(&1, result))
-        data = %{data | flush_waiters: []}
+        reply_all(data.next_flush_waiters, result)
+        data = %{data | next_flush_waiters: []}
 
         # Events tracked meanwhile filled the buffer up; a kept batch alone doesn't.
         case {data.buffered, data.unsent} do
@@ -359,6 +368,8 @@ defmodule Flagsmith.Client.Events.Processor do
         end
     end
   end
+
+  defp reply_all(callers, reply), do: Enum.each(callers, &GenServer.reply(&1, reply))
 
   # Sends the buffer once while closing, by the deadline, then stops.
   defp close_next(%__MODULE__{closing: %{final_batch: false} = closing} = data, result) do
@@ -372,9 +383,17 @@ defmodule Flagsmith.Client.Events.Processor do
 
   defp stop_closing(%__MODULE__{closing: closing} = data, result) do
     GenServer.reply(closing.from, result)
-    Enum.each(data.flush_waiters, &GenServer.reply(&1, {:error, :closed}))
+    reply_all(data.flush_waiters ++ data.next_flush_waiters, {:error, :closed})
 
-    {:stop, :normal, %{data | buffer: :queue.new(), buffered: 0, flush_waiters: [], closing: nil}}
+    {:stop, :normal,
+     %{
+       data
+       | buffer: :queue.new(),
+         buffered: 0,
+         flush_waiters: [],
+         next_flush_waiters: [],
+         closing: nil
+     }}
   end
 
   # What became of a batch: forgets it once delivered or dropped, and puts it back in
@@ -411,16 +430,16 @@ defmodule Flagsmith.Client.Events.Processor do
   end
 
   defp keep(data, events) do
-    kept = events ++ :queue.to_list(data.buffer)
-    dropped = length(kept) - @max_buffered_events
-    kept = if dropped > 0, do: Enum.drop(kept, dropped), else: kept
+    {dropped, kept} =
+      Enum.split(events ++ :queue.to_list(data.buffer), -@max_buffered_events)
 
-    if dropped > 0,
-      do: Logger.warning("Event buffer is full, dropping the oldest #{dropped} events")
+    if dropped != [],
+      do: Logger.warning("Event buffer is full, dropping the oldest #{length(dropped)} events")
 
-    %{data | buffer: :queue.from_list(kept), buffered: length(kept)}
+    forget_exposures(%{data | buffer: :queue.from_list(kept), buffered: length(kept)}, dropped)
   end
 
+  # Forgets the exposures among events no longer buffered, so that they're tracked again.
   defp forget_exposures(data, events) do
     keys = events |> Enum.map(&exposure_key/1) |> Enum.reject(&is_nil/1) |> MapSet.new()
     %{data | exposure_keys: MapSet.difference(data.exposure_keys, keys)}

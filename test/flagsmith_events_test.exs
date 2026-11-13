@@ -2,6 +2,7 @@ defmodule Flagsmith.Client.Events.Test do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
+  import Flagsmith.Test.Helpers, only: [wait_until: 2]
   import Mox, only: [verify_on_exit!: 1, set_mox_global: 1, expect: 3, expect: 4, stub: 3]
 
   alias Flagsmith.Client
@@ -806,6 +807,120 @@ defmodule Flagsmith.Client.Events.Test do
       assert_receive {:attempt, timeout} when timeout <= 200
       assert elapsed < 400_000
       assert is_binary(result)
+    end
+
+    test "a flush waits for one more batch at most while events keep being tracked", %{
+      config: config
+    } do
+      # Given an events API holding on to each batch until released
+      test_pid = self()
+
+      stub(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        events = Enum.map(Jason.decode!(tesla_env.body)["events"], & &1["event"])
+        send(test_pid, {:holding, self(), events})
+
+        receive do
+          :release -> {:ok, %Tesla.Env{status: 202, body: ""}}
+        end
+      end)
+
+      flush = fn n ->
+        spawn(fn -> send(test_pid, {:flushed, n, Client.flush_events(config)}) end)
+      end
+
+      :ok = Client.track_event(config, "first")
+      pid = Processor.whereis(config.environment_key)
+      flush.(1)
+      assert_receive {:holding, request, ["first"]}
+
+      # When a flush arrives while that batch is sent, with an event tracked since
+      :ok = Client.track_event(config, "second")
+      flush.(2)
+      assert wait_until(fn -> :sys.get_state(pid).next_flush_waiters != [] end, 500)
+      send(request, :release)
+
+      # Then it waits for the batch in flight and one more, whatever is tracked meanwhile
+      assert_receive {:flushed, 1, :ok}
+      assert_receive {:holding, request, ["second"]}
+      :ok = Client.track_event(config, "third")
+      _ = :sys.get_state(pid)
+      send(request, :release)
+      assert_receive {:flushed, 2, :ok}
+      refute_receive {:holding, _, _}, 100
+    end
+
+    test "an exposure dropped from a full buffer is tracked again", %{config: config} do
+      # Given an exposure dropped from a buffer the events API failed to receive
+      stub(Tesla.Adapter.Mock, :call, fn _tesla_env, _options ->
+        {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
+      end)
+
+      exposure = [identifier: "user_123", value: "treatment"]
+
+      capture_log(fn ->
+        :ok = Client.track_exposure_event(config, "banner", exposure)
+        for n <- 2..1000, do: :ok = Client.track_event(config, "event_#{n}")
+        assert Client.flush_events(config) in [:noop, {:error, {:status, 503}}]
+        :ok = Client.track_event(config, "event_1001")
+      end)
+
+      # When
+      pid = Processor.whereis(config.environment_key)
+
+      {state, log} =
+        with_log(fn ->
+          :ok = Client.track_exposure_event(config, "banner", exposure)
+          :sys.get_state(pid)
+        end)
+
+      # Then it's buffered again, the buffer dropping its oldest event for it
+      assert log =~ "dropping the oldest event_2 event"
+      events = :queue.to_list(state.buffer)
+      assert ["event_3" | _] = Enum.map(events, & &1.event)
+      assert %{event: "$flag_exposure", feature_name: "banner"} = List.last(events)
+    end
+
+    test "an exposure dropped when a kept batch no longer fits the buffer is tracked again", %{
+      config: config
+    } do
+      # Given a batch with an exposure, held then failed by the events API, while the
+      # buffer fills up with events tracked meanwhile
+      test_pid = self()
+
+      stub(Tesla.Adapter.Mock, :call, fn tesla_env, _options ->
+        events = Enum.map(Jason.decode!(tesla_env.body)["events"], & &1["event"])
+        send(test_pid, {:holding, self(), events})
+
+        receive do
+          :release -> {:ok, %Tesla.Env{status: 503, body: "unavailable"}}
+        end
+      end)
+
+      exposure = [identifier: "user_123", value: "treatment"]
+
+      capture_log(fn ->
+        :ok = Client.track_exposure_event(config, "banner", exposure)
+        for n <- 2..1000, do: :ok = Client.track_event(config, "event_#{n}")
+        for n <- 1001..2000, do: :ok = Client.track_event(config, "event_#{n}")
+
+        for _attempt <- 1..3 do
+          assert_receive {:holding, request, ["$flag_exposure" | _]}, 1000
+          send(request, :release)
+        end
+
+        # The batch is kept, but only the newest 1000 events fit the buffer, which the
+        # events tracked meanwhile filled up: they're sent straight away.
+        assert_receive {:holding, _request, ["event_1001" | _]}, 1000
+      end)
+
+      # When
+      :ok = Client.track_exposure_event(config, "banner", exposure)
+
+      # Then
+      pid = Processor.whereis(config.environment_key)
+
+      assert [%{event: "$flag_exposure", feature_name: "banner"}] =
+               :queue.to_list(:sys.get_state(pid).buffer)
     end
 
     test "closing the client stops a flush still sending when its timeout expires", %{
