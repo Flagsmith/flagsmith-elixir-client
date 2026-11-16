@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.5.0...v2.6.0) (2026-11-13)
+
+
+### Features
+
+* Retry event delivery and flush on close ([#74](https://github.com/Flagsmith/flagsmith-elixir-client/issues/74)) ([6d42e90](https://github.com/Flagsmith/flagsmith-elixir-client/commit/6d42e907f3f0a63cb3431e7faff42268aadf0b9d))
+
 ## [2.5.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.4.0...v2.5.0) (2026-11-10)
 
 
