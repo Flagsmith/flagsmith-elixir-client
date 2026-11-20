@@ -13,6 +13,7 @@ defmodule Flagsmith.Schemas.Flag do
     field(:feature_name, :string)
     field(:value, :string)
     field(:variant, :string)
+    field(:reason, :string)
     embeds_one(:experiment, Experiment)
   end
 
@@ -22,6 +23,7 @@ defmodule Flagsmith.Schemas.Flag do
         enabled: enabled,
         feature_state_value: value,
         variant: variant,
+        reason: reason,
         metadata: metadata,
         feature: %Environment.Feature{
           name: name,
@@ -34,6 +36,7 @@ defmodule Flagsmith.Schemas.Flag do
       value: value,
       feature_id: id,
       variant: variant,
+      reason: reason,
       experiment: metadata && metadata.experiment
     }
   end
@@ -42,6 +45,7 @@ defmodule Flagsmith.Schemas.Flag do
         enabled: enabled,
         feature_state_value: value,
         variant: variant,
+        reason: reason,
         metadata: metadata,
         feature: %Features.Feature{
           name: name,
@@ -54,6 +58,7 @@ defmodule Flagsmith.Schemas.Flag do
       value: value,
       feature_id: id,
       variant: variant,
+      reason: reason,
       experiment: metadata && metadata.experiment
     }
   end

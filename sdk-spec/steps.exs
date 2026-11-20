@@ -7,7 +7,12 @@ defmodule SDKSpec.Steps do
   alias Flagsmith.Schemas
 
   defp as_spec_flag(flag),
-    do: %{feature: flag.feature_name, enabled: flag.enabled, value: flag.value}
+    do: %{
+      feature: flag.feature_name,
+      enabled: flag.enabled,
+      value: flag.value,
+      reason: flag.reason
+    }
 
   defp as_spec_flags(flags), do: Enum.map(Client.all_flags(flags), &as_spec_flag/1)
 

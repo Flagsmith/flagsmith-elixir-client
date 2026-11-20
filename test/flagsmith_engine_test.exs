@@ -187,7 +187,9 @@ defmodule Flagsmith.EngineTest do
       # note for non elixir devs the ^ (pin) operator on the left side of a match (=)
       # forces the variable to be exactly the one that was pinned instead of doing
       # re-assignement, it would be equivalent to doing var == something
-      assert ^feature_states = Flagsmith.Engine.get_environment_feature_states(env)
+      # evaluated without an identity, each comes with the reason it has its value
+      static_feature_states = Enum.map(feature_states, &%{&1 | reason: "STATIC"})
+      assert ^static_feature_states = Flagsmith.Engine.get_environment_feature_states(env)
     end
 
     test "get_environment_feature_states/1 when project hide_disabled is true", %{env: env} do
@@ -207,14 +209,16 @@ defmodule Flagsmith.EngineTest do
 
       # replace the feature states with the new one that should have an additional enabled one
       new_env = %{env | feature_states: new_feature_states}
+      expected_first_feature_state = %{new_first_feature_state | reason: "STATIC"}
 
       # we should have 3 enabled, the 2 enabled originally + the last one we enabled
-      assert [^new_first_feature_state, _, _] =
+      assert [^expected_first_feature_state, _, _] =
                Flagsmith.Engine.get_environment_feature_states(new_env)
     end
 
     test "get_environment_feature_state/2", %{env: env} do
-      [%{feature: %{name: name}} = first_feature_state | _] = env.feature_states
+      [%{feature: %{name: name}} = feature_state | _] = env.feature_states
+      first_feature_state = %{feature_state | reason: "STATIC"}
 
       assert ^first_feature_state = Flagsmith.Engine.get_environment_feature_state(env, name)
     end
@@ -247,6 +251,42 @@ defmodule Flagsmith.EngineTest do
                %Features.FeatureState{},
                %Features.FeatureState{}
              ] = Flagsmith.Engine.get_identity_feature_states(env, identity, [])
+    end
+
+    test "get_identity_feature_states/3 gives the reason each flag has its value", %{
+      env: env,
+      identity: identity
+    } do
+      # without the identity's overrides, which match as the `identity_overrides` segment
+      identity = %{identity | identity_features: []}
+
+      reasons = fn env, traits ->
+        env
+        |> Flagsmith.Engine.get_identity_feature_states(identity, traits)
+        |> Map.new(fn %{feature: %{name: name}, reason: reason} -> {name, reason} end)
+      end
+
+      # the identity's `show_popup` trait is false by default, matching `test_segment`
+      # which overrides `secret_button`, and it falls in the 60% split of `header_size`
+      assert %{
+               "header_size" => "SPLIT; weight=60.0",
+               "body_size" => "STATIC",
+               "secret_button" => "TARGETING_MATCH; segment=test_segment",
+               "test_identity" => "STATIC"
+             } = reasons.(env, [])
+
+      # with `show_popup` true and only `test_segment` overriding `secret_button`,
+      # no segment overriding it matches
+      segments = Enum.filter(env.project.segments, &(&1.name == "test_segment"))
+      env = %{env | project: %{env.project | segments: segments}}
+
+      assert %{"secret_button" => "DEFAULT"} =
+               reasons.(env, [
+                 %Traits.Trait{
+                   trait_key: "show_popup",
+                   trait_value: %Traits.Trait.Value{value: true, type: :boolean}
+                 }
+               ])
     end
 
     test "get_identity_segments/3", %{env: env, identity: identity} do
