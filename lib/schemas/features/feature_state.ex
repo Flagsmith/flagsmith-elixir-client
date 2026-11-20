@@ -19,6 +19,7 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
     field(:id, :integer)
     field(:identity, :integer)
     field(:variant, :string)
+    field(:reason, :string)
 
     embeds_one(:feature, Flagsmith.Schemas.Features.Feature)
     embeds_one(:metadata, __MODULE__.Metadata)
@@ -38,7 +39,8 @@ defmodule Flagsmith.Schemas.Features.FeatureState do
         :feature_segment,
         :environment,
         :enabled,
-        :variant
+        :variant,
+        :reason
       ],
       empty_values: []
     )
