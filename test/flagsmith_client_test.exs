@@ -300,7 +300,7 @@ defmodule Flagsmith.Client.Test do
                      feature_id: 13534,
                      feature_name: "header_size",
                      value: "34px",
-                     reason: "STATIC"
+                     reason: "SPLIT; weight=60.0"
                    },
                    "secret_button" => %Schemas.Flag{
                      enabled: true,
@@ -314,7 +314,7 @@ defmodule Flagsmith.Client.Test do
                      feature_id: 18382,
                      feature_name: "test_identity",
                      value: "very_no",
-                     reason: "IDENTITY_OVERRIDE"
+                     reason: "TARGETING_MATCH; segment=identity_overrides"
                    }
                  }
                }
