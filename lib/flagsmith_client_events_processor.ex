@@ -488,7 +488,7 @@ defmodule Flagsmith.Client.Events.Processor do
       reason: inspect(failure(result))
     )
 
-    backoff = :rand.uniform(@retry_base_milliseconds * 2 ** (attempt - 1) + 1) - 1
+    backoff = :rand.uniform(@retry_base_milliseconds * Integer.pow(2, attempt - 1) + 1) - 1
 
     case remaining(deadline) do
       remaining when remaining <= backoff ->
