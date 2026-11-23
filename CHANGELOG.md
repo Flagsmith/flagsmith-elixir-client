@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.1](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.7.0...v2.7.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* Compile on Elixir 1.12 so releases publish to Hex ([#79](https://github.com/Flagsmith/flagsmith-elixir-client/issues/79)) ([bbabe3e](https://github.com/Flagsmith/flagsmith-elixir-client/commit/bbabe3e5d747527c59e1872dc6702d0797261760))
+
 ## [2.7.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.6.0...v2.7.0) (2026-11-23)
 
 
