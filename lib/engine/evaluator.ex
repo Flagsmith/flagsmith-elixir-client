@@ -777,6 +777,6 @@ defmodule Flagsmith.Engine.Evaluator do
   defp to_str(value) when is_integer(value), do: Integer.to_string(value)
   defp to_str(value) when is_float(value), do: Float.to_string(value)
   defp to_str(value) when is_atom(value), do: Atom.to_string(value)
-  defp to_str(%Version{} = value), do: Version.to_string(value)
+  defp to_str(%Version{} = value), do: to_string(value)
   defp to_str(value), do: inspect(value)
 end

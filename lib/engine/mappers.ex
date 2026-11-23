@@ -73,7 +73,7 @@ defmodule Flagsmith.Engine.Mappers do
   defp map_trait(%Traits.Trait{trait_key: key, trait_value: value}),
     do: {key, map_trait_value(value)}
 
-  defp map_trait_value(%Version{} = value), do: Version.to_string(value)
+  defp map_trait_value(%Version{} = value), do: to_string(value)
   defp map_trait_value(value), do: value
 
   defp map_segment(%Segments.Segment{id: id, name: name} = segment) do
