@@ -256,7 +256,7 @@ defmodule Flagsmith.Client.Poller do
   # We should never receive this message but I like having a catch all for info msgs
   # and just log.
   def handle_event(:info, unknown, _state, _data) do
-    Logger.warn("#{inspect(__MODULE__)} received unexpected message: #{inspect(unknown)}")
+    Logger.warning("#{inspect(__MODULE__)} received unexpected message: #{inspect(unknown)}")
     {:keep_state_and_data, []}
   end
 

@@ -167,7 +167,7 @@ defmodule Flagsmith.Configuration.Test do
   end
 
   test "logs warning if unknown opt is passed" do
-    assert capture_log([level: :warn], fn ->
+    assert capture_log([level: :warning], fn ->
              Configuration.build(environment_key: "A", api_url_typo: "something")
            end) =~ "unknown option :api_url_typo passed as configuration to Flagsmith.Client"
   end

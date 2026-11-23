@@ -9,8 +9,26 @@ on:
 jobs:
   build:
 
-    name: Build and test
-    runs-on: ubuntu-latest
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The versions we develop on.
+          - name: .tool-versions
+            runs-on: ubuntu-latest
+            version-file: .tool-versions
+            version-type: strict
+            lint: true
+          # The minimum versions mix.exs supports (`elixir: "~> 1.12"`), also used to publish to Hex.
+          - name: Elixir 1.12
+            runs-on: ubuntu-24.04 # The newest runner with builds of OTP 24
+            elixir: "1.12"
+            otp: "24"
+            version-type: loose
+            lint: false
 
     steps:
     - name: Checkout
@@ -21,8 +39,10 @@ jobs:
     - name: Set up Elixir
       uses: erlef/setup-beam@v1
       with:
-        version-file: .tool-versions
-        version-type: strict
+        version-file: ${{ matrix.version-file }}
+        elixir-version: ${{ matrix.elixir }}
+        otp-version: ${{ matrix.otp }}
+        version-type: ${{ matrix.version-type }}
 
     - name: Set mix.lock file hash environment variable
       run: echo "MIX_LOCK_HASH=${{ hashFiles('**/mix.lock') }}" >> $GITHUB_ENV
@@ -32,8 +52,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: deps
-        key: ${{ runner.os }}-deps-${{ env.MIX_LOCK_HASH }}
-        restore-keys: ${{ runner.os }}-mix-
+        key: ${{ runner.os }}-${{ matrix.name }}-deps-${{ env.MIX_LOCK_HASH }}
+        restore-keys: ${{ runner.os }}-${{ matrix.name }}-deps-
 
     - name: Install dependencies
       run: mix deps.get
@@ -42,21 +62,27 @@ jobs:
       uses: actions/cache@v4
       with:
         path: _build
-        key: ${{ runner.os }}-build-${{ env.MIX_LOCK_HASH }}
-        restore-keys: ${{ runner.os }}-build-
+        key: ${{ runner.os }}-${{ matrix.name }}-build-${{ env.MIX_LOCK_HASH }}
+        restore-keys: ${{ runner.os }}-${{ matrix.name }}-build-
+
+    - name: Compile
+      run: mix compile --warnings-as-errors
 
     - name: Check formatting
+      if: matrix.lint
       run:  mix format --check-formatted
 
     - name: Run tests
       run: mix test
 
     - name: Restore dialyzer PLTS
+      if: matrix.lint
       uses: actions/cache@v4
       with:
         path: priv/plts
-        key: ${{ runner.os }}-plts-${{ env.MIX_LOCK_HASH }}
-        restore-keys: ${{ runner.os }}-plts-
+        key: ${{ runner.os }}-${{ matrix.name }}-plts-${{ env.MIX_LOCK_HASH }}
+        restore-keys: ${{ runner.os }}-${{ matrix.name }}-plts-
 
     - name: Run dialyzer
+      if: matrix.lint
       run: mix dialyzer

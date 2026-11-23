@@ -144,6 +144,6 @@ defimpl Jason.Encoder, for: Flagsmith.Schemas.Traits.Trait.Value do
   # Jason encodes decimals as strings; send them as integers or floats instead.
   defp to_json_value(%Decimal{exp: exp} = value) when exp >= 0, do: Decimal.to_integer(value)
   defp to_json_value(%Decimal{} = value), do: Decimal.to_float(value)
-  defp to_json_value(%Version{} = value), do: Version.to_string(value)
+  defp to_json_value(%Version{} = value), do: to_string(value)
   defp to_json_value(value), do: value
 end
