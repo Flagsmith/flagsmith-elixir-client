@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.2](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.7.1...v2.7.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* Semver traits crash on Elixir 1.12 and 1.13 ([#81](https://github.com/Flagsmith/flagsmith-elixir-client/issues/81)) ([e1890e8](https://github.com/Flagsmith/flagsmith-elixir-client/commit/e1890e8efbc050052bfe5ba1f9205d37ea83f4e2))
+
 ## [2.7.1](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.7.0...v2.7.1) (2026-11-23)
 
 
