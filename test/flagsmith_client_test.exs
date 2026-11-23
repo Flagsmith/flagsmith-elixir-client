@@ -53,25 +53,29 @@ defmodule Flagsmith.Client.Test do
                     enabled: false,
                     feature_id: 13535,
                     feature_name: "body_size",
-                    value: "18px"
+                    value: "18px",
+                    reason: "STATIC"
                   },
                   "header_size" => %Schemas.Flag{
                     enabled: false,
                     feature_id: 13534,
                     feature_name: "header_size",
-                    value: "24px"
+                    value: "24px",
+                    reason: "STATIC"
                   },
                   "secret_button" => %Schemas.Flag{
                     enabled: true,
                     feature_id: 17985,
                     feature_name: "secret_button",
-                    value: "{\"colour\": \"#ababab\"}"
+                    value: "{\"colour\": \"#ababab\"}",
+                    reason: "STATIC"
                   },
                   "test_identity" => %Schemas.Flag{
                     enabled: true,
                     feature_id: 18382,
                     feature_name: "test_identity",
-                    value: "very_yes"
+                    value: "very_yes",
+                    reason: "STATIC"
                   }
                 }
               }} = Flagsmith.Client.get_environment_flags(config)
@@ -288,25 +292,29 @@ defmodule Flagsmith.Client.Test do
                      enabled: false,
                      feature_id: 13535,
                      feature_name: "body_size",
-                     value: "18px"
+                     value: "18px",
+                     reason: "STATIC"
                    },
                    "header_size" => %Schemas.Flag{
                      enabled: false,
                      feature_id: 13534,
                      feature_name: "header_size",
-                     value: "34px"
+                     value: "34px",
+                     reason: "SPLIT; weight=60.0"
                    },
                    "secret_button" => %Schemas.Flag{
                      enabled: true,
                      feature_id: 17985,
                      feature_name: "secret_button",
-                     value: ""
+                     value: "",
+                     reason: "TARGETING_MATCH; segment=test_segment"
                    },
                    "test_identity" => %Schemas.Flag{
                      enabled: true,
                      feature_id: 18382,
                      feature_name: "test_identity",
-                     value: "very_no"
+                     value: "very_no",
+                     reason: "TARGETING_MATCH; segment=identity_overrides"
                    }
                  }
                }

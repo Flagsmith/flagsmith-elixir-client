@@ -24,6 +24,8 @@ defmodule Flagsmith.Schemas.Environment.FeatureState do
 
     # The variant an identity is served, set when evaluating its flags.
     field(:variant, :string, virtual: true)
+    # Why the flag evaluated to its value, set when evaluating flags.
+    field(:reason, :string, virtual: true)
   end
 
   @doc false
