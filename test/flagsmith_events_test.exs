@@ -867,11 +867,13 @@ defmodule Flagsmith.Client.Events.Test do
       # When
       pid = Processor.whereis(config.environment_key)
 
-      {state, log} =
-        with_log(fn ->
+      log =
+        capture_log(fn ->
           :ok = Client.track_exposure_event(config, "banner", exposure)
-          :sys.get_state(pid)
+          send(self(), {:state, :sys.get_state(pid)})
         end)
+
+      assert_received {:state, state}
 
       # Then it's buffered again, the buffer dropping its oldest event for it
       assert log =~ "dropping the oldest event_2 event"

@@ -7,6 +7,10 @@ defmodule Flagsmith.Test.Helpers do
   defp assert_request_key(key, vals, env) when key in [:headers, :query],
     do: assert_multiple_kv(vals, Map.get(env, key, []))
 
+  # Compare JSON bodies as data, as their key order isn't stable across OTP versions.
+  defp assert_request_key(:body, val, %{body: body}) when is_binary(val) and is_binary(body),
+    do: assert(Jason.decode!(val) == Jason.decode!(body))
+
   defp assert_request_key(key, val, env),
     do: assert(val == Map.get(env, key))
 
