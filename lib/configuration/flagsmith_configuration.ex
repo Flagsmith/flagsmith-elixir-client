@@ -110,7 +110,9 @@ defmodule Flagsmith.Configuration do
           :ok
 
         false ->
-          Logger.warn("unknown option #{inspect(k)} passed as configuration to Flagsmith.Client")
+          Logger.warning(
+            "unknown option #{inspect(k)} passed as configuration to Flagsmith.Client"
+          )
       end
     end)
 

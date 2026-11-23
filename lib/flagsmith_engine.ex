@@ -521,7 +521,7 @@ defmodule Flagsmith.Engine do
     end
   rescue
     Decimal.Error ->
-      Logger.warn(
+      Logger.warning(
         "invalid MODULO segment rule or trait value :: rule: #{inspect(condition_value)} :: value: #{inspect(value)}"
       )
 
