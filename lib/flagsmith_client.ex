@@ -23,7 +23,7 @@ defmodule Flagsmith.Client do
   @spec version() :: String.t()
   def version do
     # x-release-please-start-version
-    "2.6.0"
+    "2.7.0"
     # x-release-please-end
   end
 

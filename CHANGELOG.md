@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.6.0...v2.7.0) (2026-11-23)
+
+
+### Features
+
+* Every SDK includes `reason` in responses for identity and environment flags ([#77](https://github.com/Flagsmith/flagsmith-elixir-client/issues/77)) ([4f3cdf1](https://github.com/Flagsmith/flagsmith-elixir-client/commit/4f3cdf19e9b1af0fd813308f9c5fc38895ff98be))
+
 ## [2.6.0](https://github.com/Flagsmith/flagsmith-elixir-client/compare/v2.5.0...v2.6.0) (2026-11-13)
 
 
